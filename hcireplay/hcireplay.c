@@ -35,12 +35,14 @@
 #include "lib/bluetooth.h"
 #include "lib/hci.h"
 #include "hcireplay.h"
+#include "hciseq.h"
 #include "parser/parser.h"
 #include <fcntl.h>
 #include <errno.h>
 #include <stdlib.h>
 
 struct hciseq dumpseq;
+struct parser_t parser;
 
 static void delete_list() {
 	struct framenode *node, *tmp;
@@ -289,12 +291,16 @@ int main(int argc, char *argv[])
 	}
 
 	flags |= DUMP_BTSNOOP;
+	flags |= DUMP_VERBOSE;
+	init_parser(flags, filter, defpsm, defcompid, pppdump_fd, audio_fd);
 	if(parse_dump(fd, &dumpseq, flags) < 0) {
 		fprintf(stderr, "Error parsing dump file\n");
 		vhci_close(vhci);
 		return 1;
 	}
+	dumpseq.current = dumpseq.frames;
 	btdev_set_hciseq(vhci->btdev, &dumpseq);
+
 
 	server = server_open_unix("/tmp/bt-server-bredr", 0x42);
 	if (!server) {
