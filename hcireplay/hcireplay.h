@@ -1,13 +1,3 @@
-struct hciseq {
-	struct framenode *frames;
-	int len;
-};
-
-struct framenode {
-	struct frame *frame;
-	struct framenode *next;
-};
-
 /*
  * hcidump.c
  */
