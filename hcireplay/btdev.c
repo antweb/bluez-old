@@ -34,17 +34,11 @@
 #include "bt.h"
 #include "btdev.h"
 
-#include "hcireplay.h"
-#include "parser/parser.h"
-#include "lib/hci.h"
-#include "hciseq.h"
-
 #define le16_to_cpu(val) (val)
 #define cpu_to_le16(val) (val)
 
 struct btdev {
 	struct btdev *conn;
-	struct hciseq *hciseq;
 
 	btdev_send_func send_handler;
 	void *send_data;
@@ -572,13 +566,6 @@ static void remote_version_complete(struct btdev *btdev, uint16_t handle)
 							&rvc, sizeof(rvc));
 }
 
-void btdev_set_hciseq(struct btdev *btdev, struct hciseq *seq) {
-	if (!btdev)
-		return;
-
-	btdev->hciseq = seq;
-}
-
 static void process_cmd(struct btdev *btdev, const void *data, uint16_t len)
 {
 	const struct bt_hci_cmd_hdr *hdr = data;
@@ -1061,40 +1048,6 @@ static void process_cmd(struct btdev *btdev, const void *data, uint16_t len)
 	}
 }
 
-static void replay_cmd(struct btdev *btdev, const void *data, uint16_t len) {
-	struct frame frm_in;
-	struct frame *frm_cur = btdev->hciseq->current->frame;
-	struct frame *frm_next = btdev->hciseq->current->next->frame;
-	const struct bt_hci_cmd_hdr *hdr_in = data+1;
-	const struct bt_hci_cmd_hdr *hdr_cur = frm_cur->data+1;
-	uint16_t opcode_in;
-	uint16_t opcode_cur;
-	struct framenode *frm_ptr;
-	int pos;
-
-	opcode_in = le16_to_cpu(hdr_in->opcode);
-	opcode_cur = le16_to_cpu(hdr_cur->opcode);
-
-	if(opcode_in == opcode_cur) {
-		printf("> [I] sending event 0x%2.2x\n", ((uint8_t *)frm_next->data)[1]);
-		send_event(btdev, ((uint8_t *)frm_next->data)[1] ,frm_next->data+1, frm_next->data_len-1);
-		hci_dump(1, frm_next);
-		btdev->hciseq->current = btdev->hciseq->current->next->next;
-	} else {
-		printf("< [W] unexpected opcode - waiting for (0x%2.2x|0x%4.4x), was (0x%2.2x|0x%4.4x) \n", cmd_opcode_ogf(opcode_cur), cmd_opcode_ocf(opcode_cur), cmd_opcode_ogf(opcode_in), cmd_opcode_ocf(opcode_in));
-
-		if((pos = find_by_opcode(btdev->hciseq->current, &frm_ptr, opcode_in)) > 0) {
-			printf("    found matching packet at position %d", pos);
-		}
-
-		//process unknowns for now to get interface up
-		frm_in.ptr = data;
-		frm_in.len = len;
-		hci_dump(1, &frm_in);
-		process_cmd(btdev, data+1, len-1);
-	}
-}
-
 void btdev_receive_h4(struct btdev *btdev, const void *data, uint16_t len)
 {
 	uint8_t pkt_type;
@@ -1109,8 +1062,7 @@ void btdev_receive_h4(struct btdev *btdev, const void *data, uint16_t len)
 
 	switch (pkt_type) {
 	case BT_H4_CMD_PKT:
-		replay_cmd(btdev, data, len);
-		//process_cmd(btdev, data + 1, len - 1);
+		process_cmd(btdev, data + 1, len - 1);
 		break;
 	case BT_H4_ACL_PKT:
 		if (btdev->conn)
