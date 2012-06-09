@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <sys/epoll.h>
 
 #include "parser/parser.h"
 #include "lib/bluetooth.h"
@@ -15,8 +16,12 @@
 #include "hciseq.h"
 #include "monitor/bt.h"
 
-int fd;
 struct hciseq dumpseq;
+int fd;
+
+int epoll_fd;
+struct epoll_event epoll_event;
+#define MAX_EPOLL_EVENTS 1
 
 static inline int read_n(int fd, char *buf, int len)
 {
@@ -212,13 +217,30 @@ static int send_frm(struct frame *frm) {
 }
 
 static int recv_frm(int fd, struct frame *frm) {
-	int n;
+	int i,n;
+	int nevs;
 	uint8_t buf[HCI_MAX_FRAME_SIZE];
+	struct epoll_event ev[MAX_EPOLL_EVENTS];
 
-	if((n = read(fd, (void*)&buf, HCI_MAX_FRAME_SIZE)) > 0) {
-		memcpy(frm->data, buf, n);
-		printf("read %d\n", n);
-		fflush(stdout);
+	nevs = epoll_wait(epoll_fd, ev, MAX_EPOLL_EVENTS, -1);
+	if(nevs < 0) {
+		perror("err_wait");
+	}
+	printf("Read %d events\n", nevs);
+
+	for (i = 0; i < nevs; i++) {
+		if (ev[i].events & (EPOLLERR | EPOLLHUP)) {
+			perror("Event error");
+			return -1;
+		}
+
+		if((n = read(fd, (void*)&buf, HCI_MAX_FRAME_SIZE)) > 0) {
+			memcpy(frm->data, buf, n);
+			printf("read %d\n", n);
+			fflush(stdout);
+		} else {
+			perror("read");
+		}
 	}
 
 	return n;
@@ -314,7 +336,24 @@ static void process_out() {
 }
 
 static int vhci_open() {
-	return fd = open("/dev/vhci", O_RDWR | O_NONBLOCK);
+	fd = open("/dev/vhci", O_RDWR | O_NONBLOCK);
+	if((epoll_fd = epoll_create1(EPOLL_CLOEXEC)) < 0) {
+		return -1;
+	}
+
+	epoll_event.events = EPOLLIN;
+	epoll_event.data.fd = fd;
+
+	if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, epoll_event.data.fd, &epoll_event) < 0) {
+		return -1;
+	}
+
+	return fd;
+}
+
+static int vhci_close() {
+	epoll_ctl(epoll_fd, EPOLL_CTL_DEL, epoll_event.data.fd, NULL);
+	return close(fd);
 }
 
 static int client_connect() {
@@ -370,10 +409,9 @@ int main(int argc, char *argv[])
 
 	//if((fd = client_connect()) < 0) {
 	if((fd = vhci_open()) < 0) {
-		perror("Failed to connect to server");
+		perror("Failed to open VHCI interface");
 		return 1;
 	}
-	printf("Connected.\n");
 
 	dumpfd = open("test.btsnoop", O_RDONLY);
 	if(dumpfd < 0) {
@@ -386,16 +424,17 @@ int main(int argc, char *argv[])
 	init_parser(flags, filter, defpsm, defcompid, pppdump_fd, audio_fd);
 	if(parse_dump(dumpfd, &dumpseq, flags) < 0) {
 		fprintf(stderr, "Error parsing dump file\n");
-		client_disconnect();
+		vhci_close();
 		return 1;
 	}
 	dumpseq.current = dumpseq.frames;
 
+	printf("Running.\n");
 	process_next();
 
 	delete_list();
-	client_disconnect();
-	printf("Connection closed, terminating\n");
+	vhci_close();
+	printf("Terminating\n");
 
 	return 0;
 }
