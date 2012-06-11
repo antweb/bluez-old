@@ -20,6 +20,7 @@
 
 struct hciseq dumpseq;
 int fd;
+int pos;
 
 int epoll_fd;
 struct epoll_event epoll_event;
@@ -226,19 +227,17 @@ static int recv_frm(int fd, struct frame *frm) {
 
 	nevs = epoll_wait(epoll_fd, ev, MAX_EPOLL_EVENTS, -1);
 	if(nevs < 0) {
-		perror("err_wait");
+		perror("Failed to receive");
 	}
-	printf("Read %d events\n", nevs);
 
 	for (i = 0; i < nevs; i++) {
 		if (ev[i].events & (EPOLLERR | EPOLLHUP)) {
-			perror("Event error");
+			perror("Failed to receive");
 			return -1;
 		}
 
 		if((n = read(fd, (void*)&buf, HCI_MAX_FRAME_SIZE)) > 0) {
 			memcpy(frm->data, buf, n);
-			printf("read %d\n", n);
 			fflush(stdout);
 		}
 	}
@@ -261,24 +260,14 @@ static void replay_cmd(const void *data, uint16_t len) {
 	opcode_cur = le16_to_cpu(hdr_cur->opcode);
 
 	if(opcode_in == opcode_cur) {
-		//printf("> [I] sending event 0x%2.2x\n", ((uint8_t *)frm_next->data)[1]);
-		//send_event(btdev, ((uint8_t *)frm_next->data)[1] ,frm_next->data+1, frm_next->data_len-1);
-		//hci_dump(1, frm_next);
-		dumpseq.current = dumpseq.current->next->next;
+		//TODO: check rest of frame
+		printf("< [%d/%d]\n", pos, dumpseq.len);
 	} else {
 		printf("< [W] unexpected opcode - waiting for (0x%2.2x|0x%4.4x), was (0x%2.2x|0x%4.4x) \n", cmd_opcode_ogf(opcode_cur), cmd_opcode_ocf(opcode_cur), cmd_opcode_ogf(opcode_in), cmd_opcode_ocf(opcode_in));
 
 		if((pos = find_by_opcode(dumpseq.current, &frm_ptr, opcode_in)) > 0) {
 			printf("    found matching packet at position %d", pos);
 		}
-
-		//process unknowns for now to get interface up
-		/*
-		frm_in.ptr = data;
-		frm_in.len = len;
-		hci_dump(1, &frm_in);
-		process_cmd(data+1, len-1);
-		*/
 	}
 }
 
@@ -286,8 +275,11 @@ static void process_in();
 static void process_out();
 
 static void process_next() {
+	dumpseq.current = dumpseq.current->next;
+	pos++;
+
 	if(dumpseq.current == NULL) {
-		printf("Done.");
+		printf("Done");
 		return;
 	}
 
@@ -331,6 +323,7 @@ static void process_in() {
 
 static void process_out() {
 	//TODO: delay?
+	printf("> [%d/%d]\n", pos, dumpseq.len);
 	send_frm(dumpseq.current->frame);
 	process_next();
 }
