@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <sys/epoll.h>
+#include <getopt.h>
 
 #include "parser/parser.h"
 #include "lib/bluetooth.h"
@@ -15,6 +16,7 @@
 #include "hcireplay.h"
 #include "hciseq.h"
 #include "monitor/bt.h"
+#include "config.h"
 
 struct hciseq dumpseq;
 int fd;
@@ -238,8 +240,6 @@ static int recv_frm(int fd, struct frame *frm) {
 			memcpy(frm->data, buf, n);
 			printf("read %d\n", n);
 			fflush(stdout);
-		} else {
-			perror("read");
 		}
 	}
 
@@ -395,6 +395,21 @@ static void delete_list() {
 	}
 }
 
+static void usage(void)
+{
+	printf("hcireplay - Bluetooth replayer\n"
+		"Usage:\thcireplay-client [options] file\n"
+		"options:\n"
+		"\t-v, --version         Give version information\n"
+		"\t-h, --help            Give a short usage message\n");
+}
+
+static const struct option main_options[] = {
+	{ "version",	no_argument,	   NULL, 'v'	},
+	{ "help",	no_argument,	   NULL, 'h'	},
+	{ }
+};
+
 int main(int argc, char *argv[])
 {
 	unsigned long flags = 0;
@@ -406,17 +421,40 @@ int main(int argc, char *argv[])
 	uint16_t obex_port;
 
 	int dumpfd;
+	int i;
 
-	//if((fd = client_connect()) < 0) {
+	while(1) {
+		int opt;
+
+		opt = getopt_long(argc, argv, "vh", main_options, NULL);
+		if (opt < 0)
+			break;
+
+		switch (opt) {
+		case 'v':
+			printf("%s\n", VERSION);
+			return EXIT_SUCCESS;
+		case 'h':
+			usage();
+			return EXIT_SUCCESS;
+		default:
+			return EXIT_FAILURE;
+		}
+	}
+
+	if (optind >= argc) {
+		usage();
+		return EXIT_FAILURE;
+	}
+
 	if((fd = vhci_open()) < 0) {
 		perror("Failed to open VHCI interface");
 		return 1;
 	}
 
-	dumpfd = open("test.btsnoop", O_RDONLY);
+	dumpfd = open(argv[optind], O_RDONLY);
 	if(dumpfd < 0) {
-		fprintf(stderr, "Error opening dump file\n");
-		perror("err");
+		perror("Failed to open dump file");
 	}
 
 	flags |= DUMP_BTSNOOP;
