@@ -13,6 +13,7 @@ struct hciseq {
 struct framenode {
 	struct frame *frame;
 	struct framenode *next;
+	struct timeval ts_rel;
 };
 
 int find_by_opcode(struct framenode *start, struct framenode **ptr, uint16_t opcode);

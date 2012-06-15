@@ -7,7 +7,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include <sys/epoll.h>
+#include <sys/time.h>
 #include <getopt.h>
 
 #include "parser/parser.h"
@@ -21,10 +23,51 @@
 struct hciseq dumpseq;
 int fd;
 int pos;
+struct timeval start;
 
 int epoll_fd;
 struct epoll_event epoll_event;
 #define MAX_EPOLL_EVENTS 1
+
+static __useconds_t timeval_diff(struct timeval *l, struct timeval *r, struct timeval *diff) {
+	int tmpsec;
+
+	/* make sure we keep usec difference positive */
+	if(r->tv_usec > l->tv_usec) {
+		tmpsec = (r->tv_usec - l->tv_usec) / 1000000 + 1;
+		r->tv_sec += tmpsec;
+		r->tv_usec -= 1000000 * tmpsec;
+	}
+
+	if((l->tv_usec - r->tv_usec) > 1000000) {
+		tmpsec = (r->tv_usec - l->tv_usec) / 1000000;
+		r->tv_sec -= tmpsec;
+		r->tv_usec += 1000000 * tmpsec;
+	}
+
+	diff->tv_sec = l->tv_sec - r->tv_sec ;
+	diff->tv_usec = l->tv_usec - r->tv_usec;
+
+	return (diff->tv_sec * 1000000) + diff->tv_usec;
+}
+
+static inline __useconds_t get_rel_ts(struct timeval *start, struct timeval *diff) {
+	struct timeval now;
+	gettimeofday(&now, NULL);
+	return timeval_diff(&now, start, diff);
+}
+
+static void calc_rel_ts() {
+	struct timeval start;
+	struct framenode *tmp;
+
+	start = dumpseq.current->frame->ts;
+	tmp = dumpseq.current;
+	while(tmp != NULL) {
+		timeval_diff(&tmp->frame->ts, &start, &tmp->ts_rel);
+		tmp = tmp->next;
+	}
+}
 
 static inline int read_n(int fd, char *buf, int len)
 {
