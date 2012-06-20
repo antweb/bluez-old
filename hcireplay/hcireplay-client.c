@@ -29,6 +29,13 @@ int epoll_fd;
 struct epoll_event epoll_event;
 #define MAX_EPOLL_EVENTS 1
 
+int timeout = -1;
+int skipped = 0;
+
+static void process_in();
+static void process_out();
+static void process_next();
+
 static __useconds_t timeval_diff(struct timeval *l, struct timeval *r, struct timeval *diff) {
 	int tmpsec;
 
@@ -280,9 +287,11 @@ static int recv_frm(int fd, struct frame *frm) {
 	uint8_t buf[HCI_MAX_FRAME_SIZE];
 	struct epoll_event ev[MAX_EPOLL_EVENTS];
 
-	nevs = epoll_wait(epoll_fd, ev, MAX_EPOLL_EVENTS, -1);
+	nevs = epoll_wait(epoll_fd, ev, MAX_EPOLL_EVENTS, timeout);
 	if(nevs < 0) {
 		perror("Failed to receive");
+	} else if(nevs == 0) {
+		return 0;
 	}
 
 	for (i = 0; i < nevs; i++) {
@@ -293,14 +302,13 @@ static int recv_frm(int fd, struct frame *frm) {
 
 		if((n = read(fd, (void*)&buf, HCI_MAX_FRAME_SIZE)) > 0) {
 			memcpy(frm->data, buf, n);
-			fflush(stdout);
 		}
 	}
 
 	return n;
 }
 
-static void replay_cmd(const void *data, uint16_t len) {
+static int replay_cmd(const void *data, uint16_t len) {
 	struct frame frm_in;
 	struct frame *frm_cur = dumpseq.current->frame;
 	struct frame *frm_next = dumpseq.current->next->frame;
@@ -309,38 +317,39 @@ static void replay_cmd(const void *data, uint16_t len) {
 	uint16_t opcode_in;
 	uint16_t opcode_cur;
 	struct framenode *frm_ptr;
-	int pos;
+	int npos;
 
 	opcode_in = le16_to_cpu(hdr_in->opcode);
 	opcode_cur = le16_to_cpu(hdr_cur->opcode);
 
 	if(opcode_in == opcode_cur) {
 		//TODO: check rest of frame
-		printf("< [%d/%d]\n", pos, dumpseq.len);
+		printf("< [%d/%d] (0x%2.2x|0x%4.4x)\n", pos, dumpseq.len, cmd_opcode_ogf(opcode_cur), cmd_opcode_ocf(opcode_cur));
+		return 0;
 	} else {
 		printf("< [W] unexpected opcode - waiting for (0x%2.2x|0x%4.4x), was (0x%2.2x|0x%4.4x) \n", cmd_opcode_ogf(opcode_cur), cmd_opcode_ocf(opcode_cur), cmd_opcode_ogf(opcode_in), cmd_opcode_ocf(opcode_in));
 
-		if((pos = find_by_opcode(dumpseq.current, &frm_ptr, opcode_in)) > 0) {
+		if((npos = find_by_opcode(dumpseq.current, &frm_ptr, opcode_in)) > 0) {
 			printf("    found matching packet at position %d", pos);
 		}
+		return 1;
 	}
 }
-
-static void process_in();
-static void process_out();
 
 static void process_next() {
 	__useconds_t delay = timeval_get_usec(&dumpseq.current->ts_diff);
 
 	dumpseq.current = dumpseq.current->next;
 	pos++;
-	printf("Waiting %ld usec\n", delay);
-	usleep(delay);
 
 	if(dumpseq.current == NULL) {
-		printf("Done");
+		printf("Done\n");
+		printf("Processed %d out of %d\n", dumpseq.len-skipped, dumpseq.len);
 		return;
 	}
+
+	/* delay */
+	usleep(delay);
 
 	if(dumpseq.current->frame->in == 1) {
 		process_out();
@@ -353,20 +362,29 @@ static void process_in() {
 	static struct frame frm;
 	static uint8_t data[HCI_MAX_FRAME_SIZE];
 	uint8_t pkt_type;
+	int n;
 
 	frm.data = &data;
 	frm.ptr = frm.data;
 
-	if(recv_frm(fd, &frm) < 0) {
+	n = recv_frm(fd, &frm);
+	if(n < 0) {
 		printf("Could not receive\n");
 		return;
+	} else if(n == 0){
+		printf("  [%d/%d] Timeout\n", pos, dumpseq.len);
+		skipped++;
+		process_next();
 	}
 
 	pkt_type = ((const uint8_t *) data)[0];
 
 	switch (pkt_type) {
 	case BT_H4_CMD_PKT:
-		replay_cmd(data, frm.len);
+		if(replay_cmd(data, frm.len)) {
+			/* try again after unexpected packet */
+			process_in();
+		}
 		break;
 	case BT_H4_ACL_PKT:
 		//replay_acl(data, frm.len);
@@ -375,7 +393,6 @@ static void process_in() {
 		printf("Unsupported packet 0x%2.2x\n", pkt_type);
 		break;
 	}
-
 
 	process_next();
 }
@@ -452,11 +469,13 @@ static void usage(void)
 	printf("hcireplay - Bluetooth replayer\n"
 		"Usage:\thcireplay-client [options] file\n"
 		"options:\n"
-		"\t-v, --version         Give version information\n"
-		"\t-h, --help            Give a short usage message\n");
+		"\t-t, --timeout=<value>    Use timeout when receiving\n"
+		"\t-v, --version            Give version information\n"
+		"\t-h, --help               Give a short usage message\n");
 }
 
 static const struct option main_options[] = {
+	{ "timeout",	required_argument,	   NULL, 't'	},
 	{ "version",	no_argument,	   NULL, 'v'	},
 	{ "help",	no_argument,	   NULL, 'h'	},
 	{ }
@@ -478,11 +497,14 @@ int main(int argc, char *argv[])
 	while(1) {
 		int opt;
 
-		opt = getopt_long(argc, argv, "vh", main_options, NULL);
+		opt = getopt_long(argc, argv, "t:vh", main_options, NULL);
 		if (opt < 0)
 			break;
 
 		switch (opt) {
+		case 't':
+			timeout = atoi(optarg);
+			break;
 		case 'v':
 			printf("%s\n", VERSION);
 			return EXIT_SUCCESS;
