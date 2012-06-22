@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include "hciseq.h"
+#include "hcireplay.h"
 #include "parser/parser.h"
 
 int find_by_opcode(struct framenode *start, struct framenode **ptr, uint16_t opcode) {
@@ -21,4 +22,24 @@ int find_by_opcode(struct framenode *start, struct framenode **ptr, uint16_t opc
 	}
 
 	return -1;
+}
+
+void calc_rel_ts(struct hciseq *seq) {
+	struct timeval start;
+	struct framenode *tmp;
+
+	start = seq->current->frame->ts;
+	tmp = seq->current;
+
+	/* first packet */
+	tmp->ts_rel.tv_sec = 0;
+	tmp->ts_rel.tv_usec = 0;
+	tmp->ts_diff.tv_sec = 0;
+	tmp->ts_diff.tv_usec = 0;
+
+	while(tmp->next != NULL) {
+		timeval_diff(&tmp->next->frame->ts, &start, &tmp->next->ts_rel);
+		timeval_diff(&tmp->next->frame->ts, &tmp->frame->ts, &tmp->next->ts_diff);
+		tmp = tmp->next;
+	}
 }

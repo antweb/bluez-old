@@ -1,3 +1,6 @@
+#ifndef HCIREPLAY_H
+#define HCIREPLAY_H
+
 /*
  * hcidump.c
  */
@@ -38,3 +41,7 @@ struct pktlog_hdr {
 	uint8_t		type;
 } __attribute__ ((packed));
 #define PKTLOG_HDR_SIZE (sizeof(struct pktlog_hdr))
+
+__useconds_t timeval_diff(struct timeval *l, struct timeval *r, struct timeval *diff);
+
+#endif
