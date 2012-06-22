@@ -405,31 +405,6 @@ static int vhci_close() {
 	return close(fd);
 }
 
-static int client_connect() {
-	const char *path = "/tmp/hcireplay-server";
-	struct sockaddr_un addr;
-	int fd;
-	uint8_t buf[4096];
-
-	//init address
-	memset(&addr, 0, sizeof(addr));
-	addr.sun_family = AF_UNIX;
-	strcpy(addr.sun_path, path);
-
-	//init socket fd
-	fd = socket(PF_UNIX, SOCK_STREAM, 0);
-	if (fd < 0) {
-		perror("Failed to open server socket\n");
-		return -1;
-	}
-
-	return connect(fd, (struct sockaddr *) &addr, sizeof(addr));
-}
-
-static int client_disconnect() {
-	return close(fd);
-}
-
 static void delete_list() {
 	struct framenode *node, *tmp;
 
