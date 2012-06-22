@@ -36,7 +36,7 @@ static void process_in();
 static void process_out();
 static void process_next();
 
-static __useconds_t timeval_diff(struct timeval *l, struct timeval *r, struct timeval *diff) {
+__useconds_t timeval_diff(struct timeval *l, struct timeval *r, struct timeval *diff) {
 	int tmpsec;
 
 	/* make sure we keep usec difference positive */
@@ -66,26 +66,6 @@ static inline __useconds_t get_rel_ts(struct timeval *start, struct timeval *dif
 
 static inline timeval_get_usec(struct timeval *ts) {
 	return (ts->tv_sec * 1000000) + ts->tv_usec;
-}
-
-static void calc_rel_ts() {
-	struct timeval start;
-	struct framenode *tmp;
-
-	start = dumpseq.current->frame->ts;
-	tmp = dumpseq.current;
-
-	/* first packet */
-	tmp->ts_rel.tv_sec = 0;
-	tmp->ts_rel.tv_usec = 0;
-	tmp->ts_diff.tv_sec = 0;
-	tmp->ts_diff.tv_usec = 0;
-
-	while(tmp->next != NULL) {
-		timeval_diff(&tmp->next->frame->ts, &start, &tmp->next->ts_rel);
-		timeval_diff(&tmp->next->frame->ts, &tmp->frame->ts, &tmp->next->ts_diff);
-		tmp = tmp->next;
-	}
 }
 
 static inline int read_n(int fd, char *buf, int len)
@@ -541,7 +521,7 @@ int main(int argc, char *argv[])
 	}
 
 	dumpseq.current = dumpseq.frames;
-	calc_rel_ts();
+	calc_rel_ts(&dumpseq);
 	gettimeofday(&start, NULL);
 
 	printf("Running.\n");
