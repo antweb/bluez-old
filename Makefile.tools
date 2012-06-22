@@ -50,7 +50,7 @@ tools_ppporc_LDADD = lib/libbluetooth-private.la
 
 tools_hcieventmask_LDADD = lib/libbluetooth-private.la
 
-noinst_PROGRAMS += mgmt/btmgmt monitor/btmon emulator/btvirt hcireplay/hcireplay-client
+noinst_PROGRAMS += mgmt/btmgmt monitor/btmon emulator/btvirt hcireplay/hcireplay
 
 mgmt_btmgmt_SOURCES = mgmt/main.c src/glib-helper.c
 mgmt_btmgmt_LDADD = lib/libbluetooth-private.la @GLIB_LIBS@ 
@@ -94,11 +94,11 @@ parser_sources =  hcireplay/parser/parser.h hcireplay/parser/parser.c \
 				hcireplay/parser/bpa.c \
 				hcireplay/lib/l2cap.h
 
-hcireplay_hcireplay_client_SOURCES = hcireplay/hcireplay-client.c \
+hcireplay_hcireplay_SOURCES = hcireplay/hcireplay.c \
 					hcireplay/hciseq.h hcireplay/hciseq.c \
 					$(parser_sources) 
 					
-hcireplay_hcireplay_client_LDADD = lib/libbluetooth-private.la
+hcireplay_hcireplay_LDADD = lib/libbluetooth-private.la
 
 if READLINE
 bin_PROGRAMS += attrib/gatttool
