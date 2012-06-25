@@ -187,16 +187,6 @@ static int parse_btsnoop(int fd, struct frame *frm, struct btsnoop_hdr *hdr) {
 	frm->ts.tv_sec = (ts / 1000000ll) + 946684800ll;
 	frm->ts.tv_usec = ts % 1000000ll;
 
-	/*
-	 * determine direction of packet for testing
-	 * can probably be removed later
-	 */
-	if (((uint8_t *) frm->data)[0] == HCI_COMMAND_PKT) {
-		frm->in = 0;
-	} else if (((uint8_t *) frm->data)[0] == HCI_EVENT_PKT) {
-		frm->in = 1;
-	}
-
 	return n;
 }
 
@@ -304,7 +294,8 @@ static int replay_cmd(const void *data, uint16_t len) {
 
 	if(opcode_in == opcode_cur) {
 		//TODO: check rest of frame
-		printf("< [%d/%d] (0x%2.2x|0x%4.4x)\n", pos, dumpseq.len, cmd_opcode_ogf(opcode_cur), cmd_opcode_ocf(opcode_cur));
+		printf("< [%d/%d]", pos, dumpseq.len);
+		hci_dump(0, dumpseq.current->frame);
 		return 0;
 	} else {
 		printf("< [W] unexpected opcode - waiting for (0x%2.2x|0x%4.4x), was (0x%2.2x|0x%4.4x) \n", cmd_opcode_ogf(opcode_cur), cmd_opcode_ocf(opcode_cur), cmd_opcode_ogf(opcode_in), cmd_opcode_ocf(opcode_in));
@@ -314,6 +305,26 @@ static int replay_cmd(const void *data, uint16_t len) {
 		}
 		return 1;
 	}
+}
+
+static int replay_evt() {
+	printf("> [%d/%d]", pos, dumpseq.len);
+	hci_dump(0, dumpseq.current->frame);
+	send_frm(dumpseq.current->frame);
+	return 0;
+}
+
+static int replay_acl_in(const void *data, uint16_t len) {
+	printf("< [%d/%d]", pos, dumpseq.len);
+	hci_dump(0, dumpseq.current->frame);
+	return 0;
+}
+
+static int replay_acl_out() {
+	printf("> [%d/%d]", pos, dumpseq.len);
+	hci_dump(0, dumpseq.current->frame);
+	send_frm(dumpseq.current->frame);
+	return 0;
 }
 
 static void process_next() {
@@ -358,7 +369,6 @@ static void process_in() {
 	}
 
 	pkt_type = ((const uint8_t *) data)[0];
-
 	switch (pkt_type) {
 	case BT_H4_CMD_PKT:
 		if(replay_cmd(data, frm.len)) {
@@ -367,7 +377,7 @@ static void process_in() {
 		}
 		break;
 	case BT_H4_ACL_PKT:
-		//replay_acl(data, frm.len);
+		replay_acl_in(data, frm.len);
 		break;
 	default:
 		printf("Unsupported packet 0x%2.2x\n", pkt_type);
@@ -378,9 +388,22 @@ static void process_in() {
 }
 
 static void process_out() {
-	//TODO: delay?
-	printf("> [%d/%d]\n", pos, dumpseq.len);
-	send_frm(dumpseq.current->frame);
+	uint8_t pkt_type;
+
+	pkt_type = ((const uint8_t *) dumpseq.current->frame->data)[0];
+
+	switch (pkt_type) {
+	case BT_H4_EVT_PKT:
+		replay_evt();
+		break;
+	case BT_H4_ACL_PKT:
+		replay_acl_out();
+		break;
+	default:
+		printf("Unsupported packet 0x%2.2x\n", pkt_type);
+		break;
+	}
+
 	process_next();
 }
 
