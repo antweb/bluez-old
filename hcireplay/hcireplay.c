@@ -22,7 +22,7 @@
 
 struct hciseq dumpseq;
 int fd;
-int pos;
+int pos = 1;
 struct timeval start;
 
 int epoll_fd;
@@ -500,7 +500,13 @@ int main(int argc, char *argv[])
 	gettimeofday(&start, NULL);
 
 	printf("Running.\n");
-	process_next();
+
+	/* process first */
+	if(dumpseq.current->frame->in == 0) {
+		process_in();
+	} else {
+		process_out();
+	}
 
 	delete_list();
 	vhci_close();
