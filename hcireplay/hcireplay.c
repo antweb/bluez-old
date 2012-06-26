@@ -20,6 +20,9 @@
 #include "monitor/bt.h"
 #include "config.h"
 
+#define TIMING_NONE 0
+#define TIMING_DELTA 1
+
 struct hciseq dumpseq;
 int fd;
 int pos = 1;
@@ -31,12 +34,40 @@ struct epoll_event epoll_event;
 
 int timeout = -1;
 int skipped = 0;
+int timing = TIMING_NONE;
 
 static void process_in();
 static void process_out();
 static void process_next();
 
 __useconds_t timeval_diff(struct timeval *l, struct timeval *r, struct timeval *diff) {
+	int tmpsec;
+	static struct timeval tmp;
+
+	/* make sure we keep usec difference positive */
+	if(r->tv_usec > l->tv_usec) {
+		tmpsec = (r->tv_usec - l->tv_usec) / 1000000 + 1;
+		r->tv_sec += tmpsec;
+		r->tv_usec -= 1000000 * tmpsec;
+	}
+
+	if((l->tv_usec - r->tv_usec) > 1000000) {
+		tmpsec = (r->tv_usec - l->tv_usec) / 1000000;
+		r->tv_sec -= tmpsec;
+		r->tv_usec += 1000000 * tmpsec;
+	}
+
+	/* use local variable if we only need return value */
+	if(diff == NULL)
+		diff = &tmp;
+
+	diff->tv_sec = l->tv_sec - r->tv_sec ;
+	diff->tv_usec = l->tv_usec - r->tv_usec;
+
+	return (diff->tv_sec * 1000000) + diff->tv_usec;
+}
+
+int timeval_cmp(struct timeval *l, struct timeval *r) {
 	int tmpsec;
 
 	/* make sure we keep usec difference positive */
@@ -52,10 +83,19 @@ __useconds_t timeval_diff(struct timeval *l, struct timeval *r, struct timeval *
 		r->tv_usec += 1000000 * tmpsec;
 	}
 
-	diff->tv_sec = l->tv_sec - r->tv_sec ;
-	diff->tv_usec = l->tv_usec - r->tv_usec;
-
-	return (diff->tv_sec * 1000000) + diff->tv_usec;
+	if(l->tv_sec > r->tv_sec) {
+		return 1;
+	} else if(l->tv_sec < r->tv_sec) {
+		return -1;
+	} else {
+		if(l->tv_usec > r->tv_usec) {
+			return 1;
+		} else if(l->tv_usec > r->tv_usec) {
+			return -1;
+		} else {
+			return 0;
+		}
+	}
 }
 
 static inline __useconds_t get_rel_ts(struct timeval *start, struct timeval *diff) {
@@ -328,7 +368,14 @@ static int replay_acl_out() {
 }
 
 static void process_next() {
-	__useconds_t delay = timeval_get_usec(&dumpseq.current->ts_diff);
+	__useconds_t delay;
+	static struct timeval last;
+	static int first = 1;
+
+	if(first) {
+		last = start;
+		first = 0;
+	}
 
 	dumpseq.current = dumpseq.current->next;
 	pos++;
@@ -340,7 +387,18 @@ static void process_next() {
 	}
 
 	/* delay */
-	usleep(delay);
+	if(timing == TIMING_DELTA) {
+		/* consider exec time of process_out()/process_in() */
+		get_rel_ts(&last, &last);
+		if(timeval_cmp(&dumpseq.current->ts_diff, &last) >= 0) {
+			delay = timeval_diff(&dumpseq.current->ts_diff, &last, NULL);
+			usleep(delay);
+		} else {
+			/* exec time was longer than delay */
+			printf("  [W] Packet delay\n");
+		}
+		gettimeofday(&last, NULL);
+	}
 
 	if(dumpseq.current->frame->in == 1) {
 		process_out();
@@ -447,15 +505,17 @@ static void usage(void)
 	printf("hcireplay - Bluetooth replayer\n"
 		"Usage:\thcireplay-client [options] file\n"
 		"options:\n"
-		"\t-t, --timeout=<value>    Use timeout when receiving\n"
-		"\t-v, --version            Give version information\n"
-		"\t-h, --help               Give a short usage message\n");
+		"\t-d, --timing={none|delta}    Specify timing mode\n"
+		"\t-t, --timeout=<value>        Use timeout when receiving\n"
+		"\t-v, --version                Give version information\n"
+		"\t-h, --help                   Give a short usage message\n");
 }
 
 static const struct option main_options[] = {
-	{ "timeout",	required_argument,	   NULL, 't'	},
-	{ "version",	no_argument,	   NULL, 'v'	},
-	{ "help",	no_argument,	   NULL, 'h'	},
+	{ "timing",	required_argument,		NULL, 'd'	},
+	{ "timeout",	required_argument,	NULL, 't'	},
+	{ "version",	no_argument,		NULL, 'v'	},
+	{ "help",	no_argument,			NULL, 'h'	},
 	{ }
 };
 
@@ -475,11 +535,18 @@ int main(int argc, char *argv[])
 	while(1) {
 		int opt;
 
-		opt = getopt_long(argc, argv, "t:vh", main_options, NULL);
+		opt = getopt_long(argc, argv, "d:t:vh", main_options, NULL);
 		if (opt < 0)
 			break;
 
 		switch (opt) {
+		case 'd':
+			if(!strcmp(optarg, "none")) {
+				timing = TIMING_NONE;
+			} else if(!strcmp(optarg, "delta")) {
+				timing = TIMING_DELTA;
+			}
+			break;
 		case 't':
 			timeout = atoi(optarg);
 			break;
