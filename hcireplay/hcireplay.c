@@ -35,6 +35,7 @@ struct epoll_event epoll_event;
 int timeout = -1;
 int skipped = 0;
 int timing = TIMING_NONE;
+double factor = 1;
 
 static void process_in();
 static void process_out();
@@ -392,7 +393,10 @@ static void process_next() {
 		get_rel_ts(&last, &last);
 		if(timeval_cmp(&dumpseq.current->ts_diff, &last) >= 0) {
 			delay = timeval_diff(&dumpseq.current->ts_diff, &last, NULL);
-			usleep(delay);
+			delay *= factor;
+			if(usleep(delay) == -1) {
+				printf("  [E] Delay failed\n");
+			}
 		} else {
 			/* exec time was longer than delay */
 			printf("  [W] Packet delay\n");
@@ -506,6 +510,7 @@ static void usage(void)
 		"Usage:\thcireplay-client [options] file\n"
 		"options:\n"
 		"\t-d, --timing={none|delta}    Specify timing mode\n"
+		"\t-m, --factor=<value>         Use timing modifier\n"
 		"\t-t, --timeout=<value>        Use timeout when receiving\n"
 		"\t-v, --version                Give version information\n"
 		"\t-h, --help                   Give a short usage message\n");
@@ -513,6 +518,7 @@ static void usage(void)
 
 static const struct option main_options[] = {
 	{ "timing",	required_argument,		NULL, 'd'	},
+	{ "factor",	required_argument,		NULL, 'm'	},
 	{ "timeout",	required_argument,	NULL, 't'	},
 	{ "version",	no_argument,		NULL, 'v'	},
 	{ "help",	no_argument,			NULL, 'h'	},
@@ -535,7 +541,7 @@ int main(int argc, char *argv[])
 	while(1) {
 		int opt;
 
-		opt = getopt_long(argc, argv, "d:t:vh", main_options, NULL);
+		opt = getopt_long(argc, argv, "d:m:t:vh", main_options, NULL);
 		if (opt < 0)
 			break;
 
@@ -546,6 +552,9 @@ int main(int argc, char *argv[])
 			} else if(!strcmp(optarg, "delta")) {
 				timing = TIMING_DELTA;
 			}
+			break;
+		case 'm':
+			factor = atof(optarg);
 			break;
 		case 't':
 			timeout = atoi(optarg);
