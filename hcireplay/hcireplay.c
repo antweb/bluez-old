@@ -315,6 +315,7 @@ static int recv_frm(int fd, struct frame *frm) {
 
 		if((n = read(fd, (void*)&buf, HCI_MAX_FRAME_SIZE)) > 0) {
 			memcpy(frm->data, buf, n);
+			frm->len = n;
 		}
 	}
 
@@ -425,7 +426,6 @@ static void process_in() {
 		skipped++;
 		return;
 	}
-	frm.len = n;
 
 	pkt_type = ((const uint8_t *) data)[0];
 	switch (pkt_type) {
