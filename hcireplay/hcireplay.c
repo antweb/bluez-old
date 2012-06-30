@@ -12,13 +12,15 @@
 #include <sys/time.h>
 #include <getopt.h>
 
-#include "parser/parser.h"
 #include "lib/bluetooth.h"
 #include "lib/hci.h"
 #include "hcireplay.h"
 #include "hciseq.h"
 #include "monitor/bt.h"
 #include "config.h"
+#include "monitor/btsnoop.h"
+#include "monitor/control.h"
+#include "monitor/packet.h"
 
 #define TIMING_NONE 0
 #define TIMING_DELTA 1
@@ -319,7 +321,7 @@ static int recv_frm(int fd, struct frame *frm) {
 	return n;
 }
 
-static int replay_cmd(const void *data, uint16_t len) {
+static int replay_cmd(const void *data, int len) {
 	struct frame frm_in;
 	struct frame *frm_cur = dumpseq.current->frame;
 	struct frame *frm_next = dumpseq.current->next->frame;
@@ -335,35 +337,35 @@ static int replay_cmd(const void *data, uint16_t len) {
 
 	if(opcode_in == opcode_cur) {
 		//TODO: check rest of frame
-		printf("< [%d/%d]", pos, dumpseq.len);
-		hci_dump(0, dumpseq.current->frame);
+		printf("[%d/%d] ", pos, dumpseq.len);
+		packet_hci_command(&start, 0x00, data + 1, len);
 		return 0;
 	} else {
-		printf("< [W] unexpected opcode - waiting for (0x%2.2x|0x%4.4x), was (0x%2.2x|0x%4.4x) \n", cmd_opcode_ogf(opcode_cur), cmd_opcode_ocf(opcode_cur), cmd_opcode_ogf(opcode_in), cmd_opcode_ocf(opcode_in));
+		printf("[W]  < unexpected opcode - waiting for (0x%2.2x|0x%4.4x), was (0x%2.2x|0x%4.4x) \n", cmd_opcode_ogf(opcode_cur), cmd_opcode_ocf(opcode_cur), cmd_opcode_ogf(opcode_in), cmd_opcode_ocf(opcode_in));
 
 		if((npos = find_by_opcode(dumpseq.current, &frm_ptr, opcode_in)) > 0) {
-			printf("    found matching packet at position %d", pos);
+			printf("[I]  Found matching packet at position %d\n", pos);
 		}
 		return 1;
 	}
 }
 
 static int replay_evt() {
-	printf("> [%d/%d]", pos, dumpseq.len);
-	hci_dump(0, dumpseq.current->frame);
+	printf("[%d/%d] ", pos, dumpseq.len);
+	packet_hci_event(&start, 0x00, dumpseq.current->frame->data + 1, dumpseq.current->frame->len);
 	send_frm(dumpseq.current->frame);
 	return 0;
 }
 
-static int replay_acl_in(const void *data, uint16_t len) {
-	printf("< [%d/%d]", pos, dumpseq.len);
-	hci_dump(0, dumpseq.current->frame);
+static int replay_acl_in(const void *data, int len) {
+	printf("[%d/%d] ", pos, dumpseq.len);
+	packet_hci_acldata(&start, 0x00, 0x01, data, len);
 	return 0;
 }
 
 static int replay_acl_out() {
-	printf("> [%d/%d]", pos, dumpseq.len);
-	hci_dump(0, dumpseq.current->frame);
+	printf("[%d/%d] ", pos, dumpseq.len);
+	packet_hci_acldata(&start, 0x00, 0x00, dumpseq.current->frame->data + 1, dumpseq.current->frame->len);
 	send_frm(dumpseq.current->frame);
 	return 0;
 }
@@ -382,11 +384,11 @@ static void process() {
 				delay = timeval_diff(&dumpseq.current->ts_diff, &last, NULL);
 				delay *= factor;
 				if(usleep(delay) == -1) {
-					printf("  [E] Delay failed\n");
+					printf("[E] Delay failed\n");
 				}
 			} else {
 				/* exec time was longer than delay */
-				printf("  [W] Packet delay\n");
+				printf("[W] Packet delay\n");
 			}
 			gettimeofday(&last, NULL);
 		}
@@ -423,6 +425,7 @@ static void process_in() {
 		skipped++;
 		return;
 	}
+	frm.len = n;
 
 	pkt_type = ((const uint8_t *) data)[0];
 	switch (pkt_type) {
@@ -518,12 +521,6 @@ static const struct option main_options[] = {
 int main(int argc, char *argv[])
 {
 	unsigned long flags = 0;
-	unsigned long filter = ~0L;
-	int device = 0;
-	int defpsm = 0;
-	int defcompid = DEFAULT_COMPID;
-	int opt, pppdump_fd = -1, audio_fd = -1;
-	uint16_t obex_port;
 
 	int dumpfd;
 	int i,j;
@@ -572,7 +569,6 @@ int main(int argc, char *argv[])
 
 	flags |= DUMP_BTSNOOP;
 	flags |= DUMP_VERBOSE;
-	init_parser(flags, filter, defpsm, defcompid, pppdump_fd, audio_fd);
 	for(j = optind; j < argc; j++) {
 		dumpfd = open(argv[j], O_RDONLY);
 		if(dumpfd < 0) {

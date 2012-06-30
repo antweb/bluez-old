@@ -1,9 +1,6 @@
 #ifndef HCIREPLAY_H
 #define HCIREPLAY_H
 
-/*
- * hcidump.c
- */
 struct hcidump_hdr {
 	uint16_t	len;
 	uint8_t		in;
@@ -41,6 +38,40 @@ struct pktlog_hdr {
 	uint8_t		type;
 } __attribute__ ((packed));
 #define PKTLOG_HDR_SIZE (sizeof(struct pktlog_hdr))
+
+/* Parser flags */
+#define DUMP_WIDTH	20
+
+#define DUMP_ASCII	0x0001
+#define DUMP_HEX	0x0002
+#define DUMP_EXT	0x0004
+#define DUMP_RAW	0x0008
+#define DUMP_BPA	0x0010
+#define DUMP_TSTAMP	0x0100
+#define DUMP_VERBOSE	0x0200
+#define DUMP_BTSNOOP	0x1000
+#define DUMP_PKTLOG	0x2000
+#define DUMP_NOVENDOR	0x4000
+#define DUMP_TYPE_MASK	(DUMP_ASCII | DUMP_HEX | DUMP_EXT)
+
+struct frame {
+	void		*data;
+	uint32_t	data_len;
+	void		*ptr;
+	uint32_t	len;
+	uint16_t	dev_id;
+	uint8_t		in;
+	uint8_t		master;
+	uint16_t	handle;
+	uint16_t	cid;
+	uint16_t	num;
+	uint8_t		dlci;
+	uint8_t		channel;
+	unsigned long	flags;
+	struct timeval	ts;
+	int		pppdump_fd;
+	int		audio_fd;
+};
 
 __useconds_t timeval_diff(struct timeval *l, struct timeval *r, struct timeval *diff);
 
