@@ -240,7 +240,7 @@ static int parse_dump(int fd, struct hciseq *seq, unsigned long flags)
 	int count;
 	struct framenode *nodeptr;
 	struct framenode *last;
-	last = NULL;
+	last = seq->current;
 
 	if (flags & DUMP_BTSNOOP) {
 		//read BTSnoop header once
@@ -249,7 +249,7 @@ static int parse_dump(int fd, struct hciseq *seq, unsigned long flags)
 		}
 	}
 
-	count = 0;
+	count = seq->len;
 	while (1) {
 		frm = malloc(sizeof(struct frame));
 		frm->data = malloc(HCI_MAX_FRAME_SIZE);
@@ -507,7 +507,7 @@ static void delete_list() {
 static void usage(void)
 {
 	printf("hcireplay - Bluetooth replayer\n"
-		"Usage:\thcireplay-client [options] file\n"
+		"Usage:\thcireplay-client [options] file...\n"
 		"options:\n"
 		"\t-d, --timing={none|delta}    Specify timing mode\n"
 		"\t-m, --factor=<value>         Use timing modifier\n"
@@ -536,7 +536,7 @@ int main(int argc, char *argv[])
 	uint16_t obex_port;
 
 	int dumpfd;
-	int i;
+	int i,j;
 
 	while(1) {
 		int opt;
@@ -580,18 +580,20 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	dumpfd = open(argv[optind], O_RDONLY);
-	if(dumpfd < 0) {
-		perror("Failed to open dump file");
-	}
-
 	flags |= DUMP_BTSNOOP;
 	flags |= DUMP_VERBOSE;
 	init_parser(flags, filter, defpsm, defcompid, pppdump_fd, audio_fd);
-	if(parse_dump(dumpfd, &dumpseq, flags) < 0) {
-		fprintf(stderr, "Error parsing dump file\n");
-		vhci_close();
-		return 1;
+	for(j = optind; j < argc; j++) {
+		dumpfd = open(argv[j], O_RDONLY);
+		if(dumpfd < 0) {
+			perror("Failed to open dump file");
+		}
+
+		if(parse_dump(dumpfd, &dumpseq, flags) < 0) {
+			fprintf(stderr, "Error parsing dump file\n");
+			vhci_close();
+			return 1;
+		}
 	}
 
 	dumpseq.current = dumpseq.frames;
