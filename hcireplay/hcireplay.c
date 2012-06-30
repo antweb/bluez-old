@@ -368,47 +368,41 @@ static int replay_acl_out() {
 	return 0;
 }
 
-static void process_next() {
+static void process() {
 	__useconds_t delay;
-	static struct timeval last;
-	static int first = 1;
+	struct timeval last;
 
-	if(first) {
-		last = start;
-		first = 0;
-	}
-
-	dumpseq.current = dumpseq.current->next;
-	pos++;
-
-	if(dumpseq.current == NULL) {
-		printf("Done\n");
-		printf("Processed %d out of %d\n", dumpseq.len-skipped, dumpseq.len);
-		return;
-	}
-
-	/* delay */
-	if(timing == TIMING_DELTA) {
-		/* consider exec time of process_out()/process_in() */
-		get_rel_ts(&last, &last);
-		if(timeval_cmp(&dumpseq.current->ts_diff, &last) >= 0) {
-			delay = timeval_diff(&dumpseq.current->ts_diff, &last, NULL);
-			delay *= factor;
-			if(usleep(delay) == -1) {
-				printf("  [E] Delay failed\n");
+	gettimeofday(&last, NULL);
+	do {
+		/* delay */
+		if(timing == TIMING_DELTA) {
+			/* consider exec time of process_out()/process_in() */
+			get_rel_ts(&last, &last);
+			if(timeval_cmp(&dumpseq.current->ts_diff, &last) >= 0) {
+				delay = timeval_diff(&dumpseq.current->ts_diff, &last, NULL);
+				delay *= factor;
+				if(usleep(delay) == -1) {
+					printf("  [E] Delay failed\n");
+				}
+			} else {
+				/* exec time was longer than delay */
+				printf("  [W] Packet delay\n");
 			}
-		} else {
-			/* exec time was longer than delay */
-			printf("  [W] Packet delay\n");
+			gettimeofday(&last, NULL);
 		}
-		gettimeofday(&last, NULL);
-	}
 
-	if(dumpseq.current->frame->in == 1) {
-		process_out();
-	} else {
-		process_in();
-	}
+		if(dumpseq.current->frame->in == 1) {
+			process_out();
+		} else {
+			process_in();
+		}
+
+		dumpseq.current = dumpseq.current->next;
+		pos++;
+	} while(dumpseq.current != NULL);
+
+	printf("Done\n");
+	printf("Processed %d out of %d\n", dumpseq.len-skipped, dumpseq.len);
 }
 
 static void process_in() {
@@ -427,7 +421,7 @@ static void process_in() {
 	} else if(n == 0){
 		printf("  [%d/%d] Timeout\n", pos, dumpseq.len);
 		skipped++;
-		process_next();
+		return;
 	}
 
 	pkt_type = ((const uint8_t *) data)[0];
@@ -445,8 +439,6 @@ static void process_in() {
 		printf("Unsupported packet 0x%2.2x\n", pkt_type);
 		break;
 	}
-
-	process_next();
 }
 
 static void process_out() {
@@ -465,8 +457,6 @@ static void process_out() {
 		printf("Unsupported packet 0x%2.2x\n", pkt_type);
 		break;
 	}
-
-	process_next();
 }
 
 static int vhci_open() {
@@ -602,12 +592,7 @@ int main(int argc, char *argv[])
 
 	printf("Running.\n");
 
-	/* process first */
-	if(dumpseq.current->frame->in == 0) {
-		process_in();
-	} else {
-		process_out();
-	}
+	process();
 
 	delete_list();
 	vhci_close();
