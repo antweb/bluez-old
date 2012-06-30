@@ -41,17 +41,16 @@
 
 #define THERMOMETER_INTERFACE "org.bluez.Thermometer"
 
-#define TEMPERATURE_MEASUREMENT_UUID	"00002a1c-0000-1000-8000-00805f9b34fb"
-#define TEMPERATURE_TYPE_UUID		"00002a1d-0000-1000-8000-00805f9b34fb"
-#define INTERMEDIATE_TEMPERATURE_UUID	"00002a1e-0000-1000-8000-00805f9b34fb"
-#define MEASUREMENT_INTERVAL_UUID	"00002a21-0000-1000-8000-00805f9b34fb"
-
 /* Temperature measurement flag fields */
 #define TEMP_UNITS		0x01
 #define TEMP_TIME_STAMP		0x02
 #define TEMP_TYPE		0x04
 
 #define FLOAT_MAX_MANTISSA	16777216 /* 2^24 */
+
+#define VALID_RANGE_DESC_SIZE	4
+#define TEMPERATURE_TYPE_SIZE	1
+#define MEASUREMENT_INTERVAL_SIZE	2
 
 struct thermometer {
 	DBusConnection		*conn;		/* The connection to the bus */
@@ -302,9 +301,9 @@ static void valid_range_desc_cb(guint8 status, const guint8 *pdu, guint16 len,
 							gpointer user_data)
 {
 	struct descriptor *desc = user_data;
-	uint8_t value[ATT_MAX_MTU];
+	uint8_t value[VALID_RANGE_DESC_SIZE];
 	uint16_t max, min;
-	int vlen;
+	ssize_t vlen;
 
 	if (status != 0) {
 		DBG("Valid Range descriptor read failed: %s",
@@ -312,7 +311,8 @@ static void valid_range_desc_cb(guint8 status, const guint8 *pdu, guint16 len,
 		return;
 	}
 
-	if (!dec_read_resp(pdu, len, value, &vlen)) {
+	vlen = dec_read_resp(pdu, len, value, sizeof(value));
+	if (vlen < 0) {
 		DBG("Protocol error\n");
 		return;
 	}
@@ -363,7 +363,7 @@ static void process_thermometer_desc(struct descriptor *desc)
 			if (g_slist_length(ch->t->fwatchers) == 0)
 				return;
 
-			val = ATT_CLIENT_CHAR_CONF_INDICATION;
+			val = GATT_CLIENT_CHARAC_CFG_IND_BIT;
 			msg = g_strdup("Enable Temperature Measurement "
 								"indication");
 		} else if (g_strcmp0(ch->attr.uuid,
@@ -371,12 +371,12 @@ static void process_thermometer_desc(struct descriptor *desc)
 			if (g_slist_length(ch->t->iwatchers) == 0)
 				return;
 
-			val = ATT_CLIENT_CHAR_CONF_NOTIFICATION;
+			val = GATT_CLIENT_CHARAC_CFG_NOTIF_BIT;
 			msg = g_strdup("Enable Intermediate Temperature "
 								"notification");
 		} else if (g_strcmp0(ch->attr.uuid,
 					MEASUREMENT_INTERVAL_UUID) == 0) {
-			val = ATT_CLIENT_CHAR_CONF_INDICATION;
+			val = GATT_CLIENT_CHARAC_CFG_IND_BIT;
 			msg = g_strdup("Enable Measurement Interval "
 								"indication");
 		} else
@@ -447,8 +447,8 @@ static void read_temp_type_cb(guint8 status, const guint8 *pdu, guint16 len,
 {
 	struct characteristic *ch = user_data;
 	struct thermometer *t = ch->t;
-	uint8_t value[ATT_MAX_MTU];
-	int vlen;
+	uint8_t value[TEMPERATURE_TYPE_SIZE];
+	ssize_t vlen;
 
 	if (status != 0) {
 		DBG("Temperature Type value read failed: %s",
@@ -456,7 +456,8 @@ static void read_temp_type_cb(guint8 status, const guint8 *pdu, guint16 len,
 		return;
 	}
 
-	if (!dec_read_resp(pdu, len, value, &vlen)) {
+	vlen = dec_read_resp(pdu, len, value, sizeof(value));
+	if (vlen < 0) {
 		DBG("Protocol error.");
 		return;
 	}
@@ -474,9 +475,9 @@ static void read_interval_cb(guint8 status, const guint8 *pdu, guint16 len,
 							gpointer user_data)
 {
 	struct characteristic *ch = user_data;
-	uint8_t value[ATT_MAX_MTU];
+	uint8_t value[MEASUREMENT_INTERVAL_SIZE];
 	uint16_t interval;
-	int vlen;
+	ssize_t vlen;
 
 	if (status != 0) {
 		DBG("Measurement Interval value read failed: %s",
@@ -484,7 +485,8 @@ static void read_interval_cb(guint8 status, const guint8 *pdu, guint16 len,
 		return;
 	}
 
-	if (!dec_read_resp(pdu, len, value, &vlen)) {
+	vlen = dec_read_resp(pdu, len, value, sizeof(value));
+	if (vlen < 0) {
 		DBG("Protocol error\n");
 		return;
 	}
@@ -1137,9 +1139,10 @@ static void ind_handler(const uint8_t *pdu, uint16_t len, gpointer user_data)
 {
 	struct thermometer *t = user_data;
 	const struct characteristic *ch;
-	uint8_t opdu[ATT_MAX_MTU];
+	uint8_t *opdu;
 	uint16_t handle, olen;
 	GSList *l;
+	int plen;
 
 	if (len < 3) {
 		DBG("Bad pdu received");
@@ -1160,7 +1163,8 @@ static void ind_handler(const uint8_t *pdu, uint16_t len, gpointer user_data)
 	else if (g_strcmp0(ch->attr.uuid, MEASUREMENT_INTERVAL_UUID) == 0)
 		proc_measurement_interval(t, pdu, len);
 
-	olen = enc_confirmation(opdu, sizeof(opdu));
+	opdu = g_attrib_get_buffer(t->attrib, &plen);
+	olen = enc_confirmation(opdu, plen);
 
 	if (olen > 0)
 		g_attrib_send(t->attrib, 0, opdu[0], opdu, olen, NULL, NULL,

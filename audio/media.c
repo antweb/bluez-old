@@ -29,6 +29,8 @@
 
 #include <errno.h>
 
+#include <bluetooth/uuid.h>
+
 #include <glib.h>
 #include <gdbus.h>
 
@@ -47,10 +49,6 @@
 #include "headset.h"
 #include "gateway.h"
 #include "manager.h"
-
-#ifndef DBUS_TYPE_UNIX_FD
-#define DBUS_TYPE_UNIX_FD -1
-#endif
 
 #define MEDIA_INTERFACE "org.bluez.Media"
 #define MEDIA_ENDPOINT_INTERFACE "org.bluez.MediaEndpoint"
@@ -276,7 +274,6 @@ static void endpoint_reply(DBusPendingCall *call, void *user_data)
 		goto done;
 	}
 
-	dbus_error_init(&err);
 	if (dbus_message_is_method_call(request->msg, MEDIA_ENDPOINT_INTERFACE,
 				"SelectConfiguration")) {
 		DBusMessageIter args, array;
@@ -481,6 +478,9 @@ static void headset_state_changed(struct audio_device *dev,
 
 	DBG("");
 
+	if (bacmp(&endpoint->adapter->src, &dev->src) != 0)
+		return;
+
 	switch (new_state) {
 	case HEADSET_STATE_DISCONNECTED:
 		transport = find_device_transport(endpoint, dev);
@@ -641,6 +641,9 @@ static void gateway_state_changed(struct audio_device *dev,
 	struct media_transport *transport;
 
 	DBG("");
+
+	if (bacmp(&endpoint->adapter->src, &dev->src) != 0)
+		return;
 
 	switch (new_state) {
 	case GATEWAY_STATE_DISCONNECTED:
@@ -1352,16 +1355,14 @@ static void set_volume(uint8_t volume, struct audio_device *dev, void *user_data
 	mp->volume = volume;
 
 	for (l = mp->adapter->endpoints; l; l = l->next) {
-
-		struct media_endpoint *endpoint;
+		struct media_endpoint *endpoint = l->data;
 		struct media_transport *transport;
 
-		if (l->data == NULL)
+		/* Volume is A2DP only */
+		if (endpoint->sep == NULL)
 			continue;
 
-		endpoint = l->data;
 		transport = find_device_transport(endpoint, dev);
-
 		if (transport == NULL)
 			continue;
 
@@ -1853,9 +1854,6 @@ static void path_free(void *data)
 int media_register(DBusConnection *conn, const char *path, const bdaddr_t *src)
 {
 	struct media_adapter *adapter;
-
-	if (DBUS_TYPE_UNIX_FD < 0)
-		return -EPERM;
 
 	adapter = g_new0(struct media_adapter, 1);
 	adapter->conn = dbus_connection_ref(conn);

@@ -37,6 +37,7 @@
 #include <bluetooth/hidp.h>
 #include <bluetooth/sdp.h>
 #include <bluetooth/sdp_lib.h>
+#include <bluetooth/uuid.h>
 
 #include <glib.h>
 #include <dbus/dbus.h>
@@ -386,6 +387,11 @@ static gboolean intr_watch_cb(GIOChannel *chan, GIOCondition cond, gpointer data
 	struct input_conn *iconn = data;
 	struct input_device *idev = iconn->idev;
 	gboolean connected = FALSE;
+	char address[18];
+
+	ba2str(&iconn->idev->dst, address);
+
+	DBG("Device %s disconnected", address);
 
 	/* Checking for ctrl_watch avoids a double g_io_channel_shutdown since
 	 * it's likely that ctrl_watch_cb has been queued for dispatching in
@@ -414,6 +420,11 @@ static gboolean intr_watch_cb(GIOChannel *chan, GIOCondition cond, gpointer data
 static gboolean ctrl_watch_cb(GIOChannel *chan, GIOCondition cond, gpointer data)
 {
 	struct input_conn *iconn = data;
+	char address[18];
+
+	ba2str(&iconn->idev->dst, address);
+
+	DBG("Device %s disconnected", address);
 
 	/* Checking for intr_watch avoids a double g_io_channel_shutdown since
 	 * it's likely that intr_watch_cb has been queued for dispatching in
@@ -810,13 +821,6 @@ static int input_device_connected(struct input_device *idev,
 	if (err < 0)
 		return err;
 
-	iconn->intr_watch = g_io_add_watch(iconn->intr_io,
-					G_IO_HUP | G_IO_ERR | G_IO_NVAL,
-					intr_watch_cb, iconn);
-	iconn->ctrl_watch = g_io_add_watch(iconn->ctrl_io,
-					G_IO_HUP | G_IO_ERR | G_IO_NVAL,
-					ctrl_watch_cb, iconn);
-
 	connected = TRUE;
 	emit_property_changed(idev->conn, idev->path, INPUT_DEVICE_INTERFACE,
 				"Connected", DBUS_TYPE_BOOLEAN, &connected);
@@ -852,6 +856,10 @@ static void interrupt_connect_cb(GIOChannel *chan, GError *conn_err,
 
 	dbus_message_unref(iconn->pending_connect);
 	iconn->pending_connect = NULL;
+
+	iconn->intr_watch = g_io_add_watch(iconn->intr_io,
+					G_IO_HUP | G_IO_ERR | G_IO_NVAL,
+					intr_watch_cb, iconn);
 
 	return;
 
@@ -911,6 +919,10 @@ static void control_connect_cb(GIOChannel *chan, GError *conn_err,
 	}
 
 	iconn->intr_io = io;
+
+	iconn->ctrl_watch = g_io_add_watch(iconn->ctrl_io,
+					G_IO_HUP | G_IO_ERR | G_IO_NVAL,
+					ctrl_watch_cb, iconn);
 
 	return;
 
@@ -1153,8 +1165,6 @@ int input_device_register(DBusConnection *conn, struct btd_device *device,
 	}
 
 	iconn = input_conn_new(idev, uuid, timeout);
-	if (!iconn)
-		return -EINVAL;
 
 	idev->connections = g_slist_append(idev->connections, iconn);
 
@@ -1176,9 +1186,6 @@ int fake_input_register(DBusConnection *conn, struct btd_device *device,
 	}
 
 	iconn = input_conn_new(idev, uuid, 0);
-	if (!iconn)
-		return -EINVAL;
-
 	iconn->fake = g_new0(struct fake_input, 1);
 	iconn->fake->ch = channel;
 	iconn->fake->connect = rfcomm_connect;
@@ -1276,11 +1283,17 @@ int input_device_set_channel(const bdaddr_t *src, const bdaddr_t *dst, int psm,
 		if (iconn->ctrl_io)
 			return -EALREADY;
 		iconn->ctrl_io = g_io_channel_ref(io);
+		iconn->ctrl_watch = g_io_add_watch(iconn->ctrl_io,
+					G_IO_HUP | G_IO_ERR | G_IO_NVAL,
+					ctrl_watch_cb, iconn);
 		break;
 	case L2CAP_PSM_HIDP_INTR:
 		if (iconn->intr_io)
 			return -EALREADY;
 		iconn->intr_io = g_io_channel_ref(io);
+		iconn->intr_watch = g_io_add_watch(iconn->intr_io,
+					G_IO_HUP | G_IO_ERR | G_IO_NVAL,
+					intr_watch_cb, iconn);
 		break;
 	}
 

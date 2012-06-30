@@ -64,10 +64,6 @@ GST_DEBUG_CATEGORY_STATIC(avdtp_sink_debug);
 		g_mutex_unlock(s->sink_lock);		\
 	} G_STMT_END
 
-#ifndef DBUS_TYPE_UNIX_FD
-#define DBUS_TYPE_UNIX_FD -1
-#endif
-
 struct bluetooth_data {
 	struct bt_get_capabilities_rsp *caps; /* Bluetooth device caps */
 	guint link_mtu;
@@ -1144,7 +1140,7 @@ static gboolean gst_avdtp_sink_update_caps(GstAvdtpSink *self)
 
 static gboolean gst_avdtp_sink_get_capabilities(GstAvdtpSink *self)
 {
-	gchar *buf[BT_SUGGESTED_BUFFER_SIZE];
+	gchar buf[BT_SUGGESTED_BUFFER_SIZE];
 	struct bt_get_capabilities_req *req = (void *) buf;
 	struct bt_get_capabilities_rsp *rsp = (void *) buf;
 	int err;

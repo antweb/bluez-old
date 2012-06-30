@@ -78,6 +78,7 @@ static struct controller_info {
 	uint8_t minor;
 
 	gboolean pending_powered;
+	gboolean pending_cod_change;
 } *controllers = NULL;
 
 static int mgmt_sock = -1;
@@ -349,6 +350,7 @@ static int mgmt_update_powered(struct btd_adapter *adapter,
 		info->pending_uuids = NULL;
 		info->pending_uuid = FALSE;
 		info->pending_class = FALSE;
+		info->pending_cod_change = FALSE;
 		return 0;
 	}
 
@@ -1272,18 +1274,12 @@ static void read_local_oob_data_failed(int sk, uint16_t index)
 		oob_read_local_data_complete(adapter, NULL, NULL);
 }
 
-static void mgmt_add_uuid_complete(int sk, uint16_t index, void *buf,
-								size_t len)
+static void handle_pending_uuids(uint16_t index)
 {
 	struct controller_info *info;
 	struct pending_uuid *pending;
 
-	DBG("add_uuid complete");
-
-	if (index > max_index) {
-		error("Unexpected index %u in add_uuid_complete event", index);
-		return;
-	}
+	DBG("index %d", index);
 
 	info = &controllers[index];
 
@@ -1309,6 +1305,19 @@ static void mgmt_add_uuid_complete(int sk, uint16_t index, void *buf,
 
 	info->pending_uuids = g_slist_remove(info->pending_uuids, pending);
 	g_free(pending);
+}
+
+static void mgmt_add_uuid_complete(int sk, uint16_t index, void *buf,
+								size_t len)
+{
+	DBG("index %d", index);
+
+	if (index > max_index) {
+		error("Unexpected index %u in add_uuid_complete event", index);
+		return;
+	}
+
+	handle_pending_uuids(index);
 }
 
 static void mgmt_cmd_complete(int sk, uint16_t index, void *buf, size_t len)
@@ -1434,6 +1443,16 @@ static void mgmt_cmd_complete(int sk, uint16_t index, void *buf, size_t len)
 	}
 }
 
+static void mgmt_add_uuid_busy(int sk, uint16_t index)
+{
+	struct controller_info *info;
+
+	DBG("index %d", index);
+
+	info = &controllers[index];
+	info->pending_cod_change = TRUE;
+}
+
 static void mgmt_cmd_status(int sk, uint16_t index, void *buf, size_t len)
 {
 	struct mgmt_ev_cmd_status *ev = buf;
@@ -1446,15 +1465,27 @@ static void mgmt_cmd_status(int sk, uint16_t index, void *buf, size_t len)
 
 	opcode = btohs(bt_get_unaligned(&ev->opcode));
 
-	error("hci%u: %s (0x%04x) failed: %s (0x%02x)", index,
-			mgmt_opstr(opcode), opcode, mgmt_errstr(ev->status),
-			ev->status);
+	if (!ev->status) {
+		DBG("%s (0x%04x) cmd_status %u", mgmt_opstr(opcode), opcode,
+								ev->status);
+		return;
+	}
 
 	switch (opcode) {
 	case MGMT_OP_READ_LOCAL_OOB_DATA:
 		read_local_oob_data_failed(sk, index);
 		break;
+	case MGMT_OP_ADD_UUID:
+		if (ev->status == MGMT_STATUS_BUSY) {
+			mgmt_add_uuid_busy(sk, index);
+			return;
+		}
+		break;
 	}
+
+	error("hci%u: %s (0x%04x) failed: %s (0x%02x)", index,
+			mgmt_opstr(opcode), opcode, mgmt_errstr(ev->status),
+			ev->status);
 }
 
 static void mgmt_controller_error(int sk, uint16_t index, void *buf, size_t len)
@@ -1550,7 +1581,7 @@ static void mgmt_device_found(int sk, uint16_t index, void *buf, size_t len)
 	else
 		eir = ev->eir;
 
-	flags = btohs(ev->flags);
+	flags = btohl(ev->flags);
 
 	ba2str(&ev->addr.bdaddr, addr);
 	DBG("hci%u addr %s, rssi %d flags 0x%04x eir_len %u",
@@ -1703,6 +1734,25 @@ static void mgmt_new_ltk(int sk, uint16_t index, void *buf, size_t len)
 		bonding_complete(info, &ev->key.addr.bdaddr, 0);
 }
 
+static void mgmt_cod_changed(int sk, uint16_t index)
+{
+	struct controller_info *info;
+
+	DBG("index %d", index);
+
+	if (index > max_index) {
+		error("Unexpected index %u in mgmt_cod_changed event", index);
+		return;
+	}
+
+	info = &controllers[index];
+
+	if (info->pending_cod_change) {
+		info->pending_cod_change = FALSE;
+		handle_pending_uuids(index);
+	}
+}
+
 static gboolean mgmt_event(GIOChannel *io, GIOCondition cond, gpointer user_data)
 {
 	char buf[MGMT_BUF_SIZE];
@@ -1766,7 +1816,7 @@ static gboolean mgmt_event(GIOChannel *io, GIOCondition cond, gpointer user_data
 		mgmt_new_settings(sk, index, buf + MGMT_HDR_SIZE, len);
 		break;
 	case MGMT_EV_CLASS_OF_DEV_CHANGED:
-		DBG("hci%u Class of Device changed", index);
+		mgmt_cod_changed(sk, index);
 		break;
 	case MGMT_EV_NEW_LINK_KEY:
 		mgmt_new_link_key(sk, index, buf + MGMT_HDR_SIZE, len);

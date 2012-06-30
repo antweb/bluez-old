@@ -41,6 +41,7 @@
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/sdp.h>
 #include <bluetooth/sdp_lib.h>
+#include <bluetooth/uuid.h>
 
 #include <glib.h>
 #include <dbus/dbus.h>
@@ -69,10 +70,6 @@
 #include "sdpd.h"
 #include "telephony.h"
 #include "unix.h"
-
-#ifndef DBUS_TYPE_UNIX_FD
-#define DBUS_TYPE_UNIX_FD -1
-#endif
 
 typedef enum {
 	HEADSET	= 1 << 0,
@@ -852,8 +849,6 @@ static struct audio_adapter *audio_adapter_get(struct btd_adapter *adapter)
 	adp = find_adapter(adapters, adapter);
 	if (!adp) {
 		adp = audio_adapter_create(adapter);
-		if (!adp)
-			return NULL;
 		adapters = g_slist_append(adapters, adp);
 	} else
 		audio_adapter_ref(adp);

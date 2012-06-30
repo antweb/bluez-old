@@ -60,8 +60,6 @@
 #define SDPDBG(fmt...)
 #endif
 
-#define BASE_UUID "00000000-0000-1000-8000-00805F9B34FB"
-
 static uint128_t bluetooth_base_uuid = {
 	.data = {	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
 			0x80, 0x00, 0x00, 0x80, 0x5F, 0x9B, 0x34, 0xFB }
@@ -1387,7 +1385,7 @@ static void attr_print_func(void *value, void *userData)
 
 	SDPDBG("=====================================\n");
 	SDPDBG("ATTRIBUTE IDENTIFIER : 0x%x\n",  d->attrId);
-	SDPDBG("ATTRIBUTE VALUE PTR : 0x%x\n", (uint32_t)value);
+	SDPDBG("ATTRIBUTE VALUE PTR : %p\n", value);
 	if (d)
 		sdp_data_print(d);
 	else
@@ -2527,11 +2525,15 @@ int sdp_set_profile_descs(sdp_record_t *rec, const sdp_list_t *profiles)
 		dtds[1] = &uint16;
 		values[1] = &profile->version;
 		seq = sdp_seq_alloc(dtds, values, 2);
-		if (seq) {
-			seqDTDs[i] = &seq->dtd;
-			seqs[i] = seq;
-			sdp_pattern_add_uuid(rec, &profile->uuid);
+
+		if (seq == NULL) {
+			status = -1;
+			break;
 		}
+
+		seqDTDs[i] = &seq->dtd;
+		seqs[i] = seq;
+		sdp_pattern_add_uuid(rec, &profile->uuid);
 		i++;
 	}
 	if (status == 0) {
@@ -3410,7 +3412,6 @@ int sdp_service_search_req(sdp_session_t *session, const sdp_list_t *search,
 		scanned += sizeof(uint16_t);
 		pdata_len -= sizeof(uint16_t);
 
-		SDPDBG("Total svc count: %d\n", total_rec_count);
 		SDPDBG("Current svc count: %d\n", rec_count);
 		SDPDBG("ResponseLength: %d\n", rsplen);
 

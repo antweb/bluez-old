@@ -233,6 +233,7 @@ test_btiotest_LDADD = @GLIB_LIBS@ lib/libbluetooth-private.la
 test_uuidtest_SOURCES = test/uuidtest.c
 test_uuidtest_LDADD = lib/libbluetooth-private.la
 
+test_mpris_player_SOURCES = test/mpris-player.c
 test_mpris_player_LDADD = @DBUS_LIBS@ @GLIB_LIBS@
 
 test_test_textfile_SOURCES = test/test-textfile.c src/textfile.h src/textfile.c
@@ -244,7 +245,7 @@ else
 EXTRA_DIST += test/rctest.1 test/hciemu.1 test/bdaddr.8
 endif
 
-EXTRA_DIST += test/apitest test/sap-client test/hsplay test/hsmicro \
+EXTRA_DIST += test/sap-client test/hsplay test/hsmicro \
 		test/dbusdef.py test/monitor-bluetooth test/list-devices \
 		test/test-discovery test/test-manager test/test-adapter \
 		test/test-device test/test-service test/test-serial \

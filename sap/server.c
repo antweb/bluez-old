@@ -28,13 +28,11 @@
 #include <config.h>
 #endif
 
-#include <stdio.h>
 #include <errno.h>
 #include <glib.h>
-#include <netinet/in.h>
-#include <bluetooth/bluetooth.h>
 #include <bluetooth/sdp.h>
 #include <bluetooth/sdp_lib.h>
+#include <bluetooth/uuid.h>
 
 #include "adapter.h"
 #include "btio.h"
@@ -46,7 +44,6 @@
 #include "server.h"
 
 #define SAP_SERVER_INTERFACE	"org.bluez.SimAccess"
-#define SAP_UUID		"0000112D-0000-1000-8000-00805F9B34FB"
 #define SAP_SERVER_CHANNEL	8
 
 #define PADDING4(x) ((4 - ((x) & 0x03)) & 0x03)
@@ -75,7 +72,6 @@ struct sap_connection {
 };
 
 struct sap_server {
-	bdaddr_t src;
 	char *path;
 	uint32_t record_id;
 	GIOChannel *listen_io;
@@ -129,9 +125,6 @@ static int is_reset_sim_req_allowed(uint8_t processing_req)
 
 static int check_msg(struct sap_message *msg)
 {
-	if (!msg)
-		return -EINVAL;
-
 	switch (msg->id) {
 	case SAP_CONNECT_REQ:
 		if (msg->nparam != 0x01)
@@ -150,7 +143,7 @@ static int check_msg(struct sap_message *msg)
 			return -EBADMSG;
 
 		if (msg->param->id != SAP_PARAM_ID_COMMAND_APDU)
-			if ( msg->param->id != SAP_PARAM_ID_COMMAND_APDU7816)
+			if (msg->param->id != SAP_PARAM_ID_COMMAND_APDU7816)
 				return -EBADMSG;
 
 		if (msg->param->len == 0x00)
@@ -233,8 +226,7 @@ static sdp_record_t *create_sap_record(uint8_t channel)
 	aproto = sdp_list_append(NULL, apseq);
 	sdp_set_access_protos(record, aproto);
 
-	sdp_set_info_attr(record, "SIM Access Server",
-			NULL, NULL);
+	sdp_set_info_attr(record, "SIM Access Server", NULL, NULL);
 
 	sdp_data_free(ch);
 	sdp_list_free(proto[0], NULL);
@@ -282,17 +274,7 @@ static int disconnect_ind(void *sap_device, uint8_t disc_type)
 	struct sap_parameter *param = (struct sap_parameter *) msg->param;
 	size_t size = sizeof(struct sap_message);
 
-	if (!conn)
-		return -EINVAL;
-
 	DBG("data %p state %d disc_type 0x%02x", conn, conn->state, disc_type);
-
-	if (conn->state != SAP_STATE_GRACEFUL_DISCONNECT &&
-			conn->state != SAP_STATE_IMMEDIATE_DISCONNECT) {
-		error("Processing error (state %d pr 0x%02x)", conn->state,
-							conn->processing_req);
-		return -EPERM;
-	}
 
 	memset(buf, 0, sizeof(buf));
 	msg->id = SAP_DISCONNECT_IND;
@@ -866,7 +848,7 @@ int sap_reset_sim_rsp(void *sap_device, uint8_t result)
 		return -EINVAL;
 
 	DBG("state %d pr 0x%02x result 0x%02x", conn->state,
-					conn->processing_req, result);
+						conn->processing_req, result);
 
 	if (conn->processing_req != SAP_RESET_SIM_REQ)
 		return 0;
@@ -894,7 +876,7 @@ int sap_transfer_card_reader_status_rsp(void *sap_device, uint8_t result,
 		return -EINVAL;
 
 	DBG("state %d pr 0x%02x result 0x%02x", conn->state,
-					conn->processing_req, result);
+						conn->processing_req, result);
 
 	if (conn->processing_req != SAP_TRANSFER_CARD_READER_STATUS_REQ)
 		return 0;
@@ -930,7 +912,7 @@ int sap_transport_protocol_rsp(void *sap_device, uint8_t result)
 		return -EINVAL;
 
 	DBG("state %d pr 0x%02x result 0x%02x", conn->state,
-					conn->processing_req, result);
+						conn->processing_req, result);
 
 	if (conn->processing_req != SAP_SET_TRANSPORT_PROTOCOL_REQ)
 		return 0;
@@ -971,7 +953,7 @@ int sap_status_ind(void *sap_device, uint8_t status_change)
 		return -EINVAL;
 
 	DBG("state %d pr 0x%02x sc 0x%02x", conn->state, conn->processing_req,
-				status_change);
+								status_change);
 
 	/* Might be need to change state to connected after ongoing call.*/
 	if (conn->state == SAP_STATE_CONNECT_MODEM_BUSY &&
@@ -1119,28 +1101,28 @@ static gboolean sap_io_cb(GIOChannel *io, GIOCondition cond, gpointer data)
 static void sap_io_destroy(void *data)
 {
 	struct sap_connection *conn = data;
+	gboolean connected = FALSE;
 
 	DBG("conn %p", conn);
 
-	if (conn && conn->io) {
-		gboolean connected = FALSE;
+	if (!conn || !conn->io)
+		return;
 
-		stop_guard_timer(conn);
+	stop_guard_timer(conn);
 
-		if (conn->state != SAP_STATE_CONNECT_IN_PROGRESS &&
-				conn->state != SAP_STATE_CONNECT_MODEM_BUSY)
-			emit_property_changed(connection, server->path,
+	if (conn->state != SAP_STATE_CONNECT_IN_PROGRESS &&
+			conn->state != SAP_STATE_CONNECT_MODEM_BUSY)
+		emit_property_changed(connection, server->path,
 					SAP_SERVER_INTERFACE, "Connected",
 					DBUS_TYPE_BOOLEAN, &connected);
 
-		if (conn->state == SAP_STATE_CONNECT_IN_PROGRESS ||
-				conn->state == SAP_STATE_CONNECT_MODEM_BUSY ||
-				conn->state == SAP_STATE_CONNECTED ||
-				conn->state == SAP_STATE_GRACEFUL_DISCONNECT)
-			sap_disconnect_req(NULL, 1);
+	if (conn->state == SAP_STATE_CONNECT_IN_PROGRESS ||
+			conn->state == SAP_STATE_CONNECT_MODEM_BUSY ||
+			conn->state == SAP_STATE_CONNECTED ||
+			conn->state == SAP_STATE_GRACEFUL_DISCONNECT)
+		sap_disconnect_req(NULL, 1);
 
-		sap_conn_remove(conn);
-	}
+	sap_conn_remove(conn);
 }
 
 static void sap_connect_cb(GIOChannel *io, GError *gerr, gpointer data)
@@ -1355,7 +1337,6 @@ int sap_server_register(const char *path, bdaddr_t *src)
 		return -ENOMEM;
 	}
 
-	bacpy(&server->src, src);
 	server->path = g_strdup(path);
 
 	record = create_sap_record(SAP_SERVER_CHANNEL);
@@ -1364,7 +1345,7 @@ int sap_server_register(const char *path, bdaddr_t *src)
 		goto sdp_err;
 	}
 
-	if (add_record_to_server(&server->src, record) < 0) {
+	if (add_record_to_server(src, record) < 0) {
 		error("Adding SAP SDP record to the SDP server failed.");
 		sdp_record_free(record);
 		goto sdp_err;
@@ -1374,7 +1355,7 @@ int sap_server_register(const char *path, bdaddr_t *src)
 
 	io = bt_io_listen(BT_IO_RFCOMM, NULL, connect_confirm_cb, server,
 			NULL, &gerr,
-			BT_IO_OPT_SOURCE_BDADDR, &server->src,
+			BT_IO_OPT_SOURCE_BDADDR, src,
 			BT_IO_OPT_CHANNEL, SAP_SERVER_CHANNEL,
 			BT_IO_OPT_SEC_LEVEL, BT_IO_SEC_HIGH,
 			BT_IO_OPT_MASTER, TRUE,

@@ -198,7 +198,7 @@ struct avdtp_sep_ind {
 	gboolean (*close) (struct avdtp *session, struct avdtp_local_sep *sep,
 				struct avdtp_stream *stream, uint8_t *err,
 				void *user_data);
-	gboolean (*abort) (struct avdtp *session, struct avdtp_local_sep *sep,
+	void (*abort) (struct avdtp *session, struct avdtp_local_sep *sep,
 				struct avdtp_stream *stream, uint8_t *err,
 				void *user_data);
 	gboolean (*reconfigure) (struct avdtp *session,
@@ -308,7 +308,6 @@ int avdtp_error_posix_errno(struct avdtp_error *err);
 
 void avdtp_get_peers(struct avdtp *session, bdaddr_t *src, bdaddr_t *dst);
 
-void avdtp_set_auto_disconnect(struct avdtp *session, gboolean auto_dc);
 gboolean avdtp_stream_setup_active(struct avdtp *session);
 void avdtp_set_device_disconnect(struct avdtp *session, gboolean dev_dc);
 

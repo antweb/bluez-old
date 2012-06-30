@@ -155,15 +155,15 @@ static void remove_attio(struct gatt_service *gatt)
 	}
 }
 
-static void gatt_get_address(struct gatt_service *gatt,
-				bdaddr_t *sba, bdaddr_t *dba)
+static void gatt_get_address(struct gatt_service *gatt, bdaddr_t *sba,
+					bdaddr_t *dba, uint8_t *bdaddr_type)
 {
 	struct btd_device *device = gatt->dev;
 	struct btd_adapter *adapter;
 
 	adapter = device_get_adapter(device);
 	adapter_get_address(adapter, sba);
-	device_get_address(device, dba, NULL);
+	device_get_address(device, dba, bdaddr_type);
 }
 
 static int characteristic_handle_cmp(gconstpointer a, gconstpointer b)
@@ -269,9 +269,10 @@ static void events_handler(const uint8_t *pdu, uint16_t len,
 	struct gatt_service *gatt = user_data;
 	struct characteristic *chr;
 	GSList *l;
-	uint8_t opdu[ATT_MAX_MTU];
+	uint8_t *opdu;
 	guint handle;
 	uint16_t olen;
+	int plen;
 
 	if (len < 3) {
 		DBG("Malformed notification/indication packet (opcode 0x%02x)",
@@ -295,7 +296,8 @@ static void events_handler(const uint8_t *pdu, uint16_t len,
 
 	switch (pdu[0]) {
 	case ATT_OP_HANDLE_IND:
-		olen = enc_confirmation(opdu, sizeof(opdu));
+		opdu = g_attrib_get_buffer(gatt->attrib, &plen);
+		olen = enc_confirmation(opdu, plen);
 		g_attrib_send(gatt->attrib, 0, opdu[0], opdu, olen,
 						NULL, NULL, NULL);
 	case ATT_OP_HANDLE_NOTIFY:
@@ -519,7 +521,7 @@ static const GDBusMethodTable char_methods[] = {
 	{ GDBUS_METHOD("GetProperties",
 			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
 			get_properties) },
-	{ GDBUS_METHOD("SetProperty",
+	{ GDBUS_ASYNC_METHOD("SetProperty",
 			GDBUS_ARGS({ "name", "s" }, { "value", "v" }), NULL,
 			set_property) },
 	{ }
@@ -548,13 +550,15 @@ static char *characteristic_list_to_string(GSList *chars)
 }
 
 static void store_characteristics(const bdaddr_t *sba, const bdaddr_t *dba,
-						uint16_t start, GSList *chars)
+					uint8_t bdaddr_type, uint16_t start,
+								GSList *chars)
 {
 	char *characteristics;
 
 	characteristics = characteristic_list_to_string(chars);
 
-	write_device_characteristics(sba, dba, start, characteristics);
+	write_device_characteristics(sba, dba, bdaddr_type, start,
+							characteristics);
 
 	g_free(characteristics);
 }
@@ -614,11 +618,12 @@ static GSList *load_characteristics(struct gatt_service *gatt, uint16_t start)
 {
 	GSList *chrs_list;
 	bdaddr_t sba, dba;
+	uint8_t bdaddr_type;
 	char *str;
 
-	gatt_get_address(gatt, &sba, &dba);
+	gatt_get_address(gatt, &sba, &dba, &bdaddr_type);
 
-	str = read_device_characteristics(&sba, &dba, start);
+	str = read_device_characteristics(&sba, &dba, bdaddr_type, start);
 	if (str == NULL)
 		return NULL;
 
@@ -632,7 +637,9 @@ static GSList *load_characteristics(struct gatt_service *gatt, uint16_t start)
 static void store_attribute(struct gatt_service *gatt, uint16_t handle,
 				uint16_t type, uint8_t *value, gsize len)
 {
+	struct btd_device *device = gatt->dev;
 	bdaddr_t sba, dba;
+	uint8_t bdaddr_type;
 	bt_uuid_t uuid;
 	char *str, *tmp;
 	guint i;
@@ -647,9 +654,11 @@ static void store_attribute(struct gatt_service *gatt, uint16_t handle,
 	for (i = 0, tmp = str + MAX_LEN_UUID_STR; i < len; i++, tmp += 2)
 		sprintf(tmp, "%02X", value[i]);
 
-	gatt_get_address(gatt, &sba, &dba);
+	gatt_get_address(gatt, &sba, &dba, NULL);
 
-	write_device_attribute(&sba, &dba, handle, str);
+	bdaddr_type = device_get_addr_type(device);
+
+	write_device_attribute(&sba, &dba, bdaddr_type, handle, str);
 
 	g_free(str);
 }
@@ -695,9 +704,17 @@ static void update_char_desc(guint8 status, const guint8 *pdu, guint16 len,
 				(void *) chr->desc, len);
 	} else if (status == ATT_ECODE_INSUFF_ENC) {
 		GIOChannel *io = g_attrib_get_channel(gatt->attrib);
+		BtIOSecLevel level = BT_IO_SEC_HIGH;
+
+		bt_io_get(io, BT_IO_L2CAP, NULL,
+				BT_IO_OPT_SEC_LEVEL, &level,
+				BT_IO_OPT_INVALID);
+
+		if (level < BT_IO_SEC_HIGH)
+			level++;
 
 		if (bt_io_set(io, BT_IO_L2CAP, NULL,
-				BT_IO_OPT_SEC_LEVEL, BT_IO_SEC_HIGH,
+				BT_IO_OPT_SEC_LEVEL, level,
 				BT_IO_OPT_INVALID)) {
 			gatt_read_char(gatt->attrib, current->handle, 0,
 					update_char_desc, current);
@@ -886,6 +903,7 @@ static void char_discovered_cb(GSList *characteristics, guint8 status,
 	uint16_t *previous_end = NULL;
 	GSList *l;
 	bdaddr_t sba, dba;
+	uint8_t bdaddr_type;
 
 	if (status != 0) {
 		const char *str = att_ecode2str(status);
@@ -924,8 +942,9 @@ static void char_discovered_cb(GSList *characteristics, guint8 status,
 	if (previous_end)
 		*previous_end = prim->range.end;
 
-	gatt_get_address(gatt, &sba, &dba);
-	store_characteristics(&sba, &dba, prim->range.start, gatt->chars);
+	gatt_get_address(gatt, &sba, &dba, &bdaddr_type);
+	store_characteristics(&sba, &dba, bdaddr_type, prim->range.start,
+								gatt->chars);
 
 	g_slist_foreach(gatt->chars, update_all_chars, gatt);
 

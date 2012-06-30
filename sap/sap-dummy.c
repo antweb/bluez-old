@@ -26,9 +26,6 @@
 #include <config.h>
 #endif
 
-#include <unistd.h>
-#include <stdlib.h>
-#include <stdint.h>
 #include <glib.h>
 #include <gdbus.h>
 
@@ -39,16 +36,16 @@
 #define SAP_DUMMY_PATH "/org/bluez/test"
 
 enum {
-	SIM_DISCONNECTED= 0x00,
-	SIM_CONNECTED	= 0x01,
-	SIM_POWERED_OFF	= 0x02,
-	SIM_MISSING	= 0x03
+	SIM_DISCONNECTED = 0x00,
+	SIM_CONNECTED	 = 0x01,
+	SIM_POWERED_OFF	 = 0x02,
+	SIM_MISSING	 = 0x03
 };
 
 static DBusConnection *connection = NULL;
 
 static int sim_card_conn_status = SIM_DISCONNECTED;
-static void *sap_data = NULL;  /* SAP server private data.*/
+static void *sap_data = NULL; /* SAP server private data. */
 static gboolean ongoing_call_status = FALSE;
 static int max_msg_size_supported = 512;
 
@@ -60,26 +57,32 @@ void sap_connect_req(void *sap_device, uint16_t maxmsgsize)
 		sap_connect_rsp(sap_device, SAP_STATUS_CONNECTION_FAILED,
 								maxmsgsize);
 		return;
-	} else if (max_msg_size_supported > maxmsgsize) {
+	}
+
+	if (max_msg_size_supported > maxmsgsize) {
 		sap_connect_rsp(sap_device, SAP_STATUS_MAX_MSG_SIZE_TOO_SMALL,
 						max_msg_size_supported);
 		return;
-	} else if (max_msg_size_supported < maxmsgsize) {
+	}
+
+	if (max_msg_size_supported < maxmsgsize) {
 		sap_connect_rsp(sap_device,
 				SAP_STATUS_MAX_MSG_SIZE_NOT_SUPPORTED,
 				max_msg_size_supported);
 		return;
-	} else if (ongoing_call_status) {
+	}
+
+	if (ongoing_call_status) {
 		sap_connect_rsp(sap_device, SAP_STATUS_OK_ONGOING_CALL,
 						max_msg_size_supported);
 		return;
-	} else {
-		sim_card_conn_status = SIM_CONNECTED;
-		sap_data = sap_device;
-
-		sap_connect_rsp(sap_device, SAP_STATUS_OK, maxmsgsize);
-		sap_status_ind(sap_device, SAP_STATUS_CHANGE_CARD_RESET);
 	}
+
+	sim_card_conn_status = SIM_CONNECTED;
+	sap_data = sap_device;
+
+	sap_connect_rsp(sap_device, SAP_STATUS_OK, maxmsgsize);
+	sap_status_ind(sap_device, SAP_STATUS_CHANGE_CARD_RESET);
 }
 
 void sap_disconnect_req(void *sap_device, uint8_t linkloss)
@@ -113,7 +116,7 @@ void sap_transfer_apdu_req(void *sap_device, struct sap_parameter *param)
 			SAP_RESULT_ERROR_NOT_ACCESSIBLE, NULL, 0);
 	else
 		sap_transfer_apdu_rsp(sap_device, SAP_RESULT_OK,
-						(uint8_t*)&apdu, sizeof(apdu));
+						(uint8_t *)&apdu, sizeof(apdu));
 }
 
 void sap_transfer_atr_req(void *sap_device)
@@ -133,7 +136,7 @@ void sap_transfer_atr_req(void *sap_device)
 								NULL, 0);
 	else
 		sap_transfer_atr_rsp(sap_device, SAP_RESULT_OK,
-						(uint8_t*)&atr, sizeof(atr));
+						(uint8_t *)&atr, sizeof(atr));
 }
 
 void sap_power_sim_off_req(void *sap_device)
@@ -227,10 +230,10 @@ static DBusMessage *ongoing_call(DBusConnection *conn, DBusMessage *msg,
 	if (ongoing_call_status && !ongoing) {
 		/* An ongoing call has finished. Continue connection.*/
 		sap_status_ind(sap_data, SAP_STATUS_CHANGE_CARD_RESET);
-		ongoing_call_status = ongoing;
+		ongoing_call_status = FALSE;
 	} else if (!ongoing_call_status && ongoing) {
 		/* An ongoing call has started.*/
-		ongoing_call_status = ongoing;
+		ongoing_call_status = TRUE;
 	}
 
 	DBG("OngoingCall status set to %d", ongoing_call_status);
@@ -339,6 +342,8 @@ int sap_init(void)
 				NULL, NULL) == FALSE) {
 		error("sap-dummy interface %s init failed on path %s",
 					SAP_DUMMY_IFACE, SAP_DUMMY_PATH);
+		dbus_connection_unref(connection);
+		connection = NULL;
 		return -1;
 	}
 

@@ -36,10 +36,6 @@
 #include "btio.h"
 #include "gatttool.h"
 
-/* Minimum MTU for ATT connections */
-#define ATT_MIN_MTU_LE		23
-#define ATT_MIN_MTU_L2CAP	48
-
 GIOChannel *gatt_connect(const gchar *src, const gchar *dst,
 				const gchar *dst_type, const gchar *sec_level,
 				int psm, int mtu, BtIOConnect connect_cb)
@@ -49,15 +45,6 @@ GIOChannel *gatt_connect(const gchar *src, const gchar *dst,
 	uint8_t dest_type;
 	GError *err = NULL;
 	BtIOSecLevel sec;
-	int minimum_mtu;
-
-	/* This check is required because currently setsockopt() returns no
-	 * errors for MTU values smaller than the allowed minimum. */
-	minimum_mtu = psm ? ATT_MIN_MTU_L2CAP : ATT_MIN_MTU_LE;
-	if (mtu != 0 && mtu < minimum_mtu) {
-		g_printerr("MTU cannot be smaller than %d\n", minimum_mtu);
-		return NULL;
-	}
 
 	/* Remote device */
 	if (dst == NULL) {
@@ -94,7 +81,6 @@ GIOChannel *gatt_connect(const gchar *src, const gchar *dst,
 				BT_IO_OPT_DEST_BDADDR, &dba,
 				BT_IO_OPT_DEST_TYPE, dest_type,
 				BT_IO_OPT_CID, ATT_CID,
-				BT_IO_OPT_OMTU, mtu,
 				BT_IO_OPT_SEC_LEVEL, sec,
 				BT_IO_OPT_INVALID);
 	else
@@ -102,7 +88,7 @@ GIOChannel *gatt_connect(const gchar *src, const gchar *dst,
 				BT_IO_OPT_SOURCE_BDADDR, &sba,
 				BT_IO_OPT_DEST_BDADDR, &dba,
 				BT_IO_OPT_PSM, psm,
-				BT_IO_OPT_OMTU, mtu,
+				BT_IO_OPT_IMTU, mtu,
 				BT_IO_OPT_SEC_LEVEL, sec,
 				BT_IO_OPT_INVALID);
 

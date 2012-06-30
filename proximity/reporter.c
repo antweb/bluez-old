@@ -40,17 +40,16 @@
 #include "error.h"
 #include "device.h"
 #include "hcid.h"
-#include "att.h"
-#include "att-database.h"
 #include "gattrib.h"
+#include "att.h"
+#include "gatt.h"
+#include "att-database.h"
 #include "attrib-server.h"
 #include "reporter.h"
 #include "linkloss.h"
 #include "immalert.h"
 
 #define BLUEZ_SERVICE "org.bluez"
-
-#define GATT_UUID     "00001801-0000-1000-8000-00805f9b34fb"
 
 struct reporter_adapter {
 	DBusConnection *conn;

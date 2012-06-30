@@ -44,7 +44,6 @@
 #include <gdbus.h>
 
 #include "log.h"
-#include "textfile.h"
 
 #include "att.h"
 #include "hcid.h"
@@ -72,7 +71,6 @@
 /* When all services should trust a remote device */
 #define GLOBAL_TRUST "[all]"
 
-#define GAP_SVC_UUID "00001800-0000-1000-8000-00805f9b34fb"
 #define APPEARANCE_CHR_UUID 0x2a01
 
 struct btd_disconnect_data {
@@ -373,7 +371,8 @@ static DBusMessage *get_properties(DBusConnection *conn,
 		icon = class_to_icon(class);
 
 		dict_append_entry(&dict, "Class", DBUS_TYPE_UINT32, &class);
-	} else if (read_remote_appearance(&src, &device->bdaddr, &app) == 0)
+	} else if (read_remote_appearance(&src, &device->bdaddr,
+						device->bdaddr_type, &app) == 0)
 		/* Appearance */
 		icon = gap_appearance_to_icon(app);
 
@@ -1087,7 +1086,8 @@ struct btd_device *device_create(DBusConnection *conn,
 		device_set_bonded(device, TRUE);
 	}
 
-	if (device_is_le(device) && has_longtermkeys(&src, &device->bdaddr)) {
+	if (device_is_le(device) && has_longtermkeys(&src, &device->bdaddr,
+							device->bdaddr_type)) {
 		device_set_paired(device, TRUE);
 		device_set_bonded(device, TRUE);
 	}
@@ -1151,25 +1151,33 @@ uint16_t btd_device_get_version(struct btd_device *device)
 static void device_remove_stored(struct btd_device *device)
 {
 	bdaddr_t src;
-	char addr[18];
+	char key[20];
 	DBusConnection *conn = get_dbus_connection();
 
 	adapter_get_address(device->adapter, &src);
-	ba2str(&device->bdaddr, addr);
+	ba2str(&device->bdaddr, key);
+
+	/* key: address only */
+	delete_entry(&src, "profiles", key);
+	delete_entry(&src, "trusts", key);
 
 	if (device_is_bonded(device)) {
-		delete_entry(&src, "linkkeys", addr);
-		delete_entry(&src, "aliases", addr);
-		delete_entry(&src, "longtermkeys", addr);
+		delete_entry(&src, "linkkeys", key);
+		delete_entry(&src, "aliases", key);
+
+		/* key: address#type */
+		sprintf(&key[17], "#%hhu", device->bdaddr_type);
+
+		delete_entry(&src, "longtermkeys", key);
+
 		device_set_bonded(device, FALSE);
 		device->paired = FALSE;
 		btd_adapter_remove_bonding(device->adapter, &device->bdaddr,
 							device->bdaddr_type);
 	}
-	delete_entry(&src, "profiles", addr);
-	delete_entry(&src, "trusts", addr);
+
 	delete_all_records(&src, &device->bdaddr);
-	delete_device_service(&src, &device->bdaddr);
+	delete_device_service(&src, &device->bdaddr, device->bdaddr_type);
 
 	if (device->blocked)
 		device_unblock(conn, device, TRUE, FALSE);
@@ -1759,7 +1767,7 @@ static void store_services(struct btd_device *device)
 	adapter_get_address(adapter, &sba);
 	device_get_address(device, &dba, NULL);
 
-	write_device_services(&sba, &dba, str);
+	write_device_services(&sba, &dba, device->bdaddr_type, str);
 
 	g_free(str);
 }
@@ -1851,7 +1859,8 @@ static void appearance_cb(guint8 status, const guint8 *pdu, guint16 plen,
 	app = att_get_u16(atval);
 
 	adapter_get_address(adapter, &src);
-	write_remote_appearance(&src, &device->bdaddr, app);
+	write_remote_appearance(&src, &device->bdaddr, device->bdaddr_type,
+									app);
 
 done:
 	att_data_list_free(list);
@@ -2201,6 +2210,11 @@ void device_set_addr_type(struct btd_device *device, uint8_t bdaddr_type)
 		return;
 
 	device->bdaddr_type = bdaddr_type;
+}
+
+uint8_t device_get_addr_type(struct btd_device *device)
+{
+	return device->bdaddr_type;
 }
 
 const gchar *device_get_path(struct btd_device *device)
@@ -3078,22 +3092,19 @@ guint btd_device_add_attio_callback(struct btd_device *device,
 	attio->dcfunc = dcfunc;
 	attio->user_data = user_data;
 
-	if (device->attrib) {
-		if (cfunc) {
-			device->attios_offline =
-				g_slist_append(device->attios_offline, attio);
+	if (device->attrib && cfunc) {
+		device->attios_offline = g_slist_append(device->attios_offline,
+									attio);
+		g_idle_add(notify_attios, device);
+		return attio->id;
+	}
 
-			g_idle_add(notify_attios, device);
-		} else {
-			device->attios = g_slist_append(device->attios, attio);
-		}
-	} else {
+	device->attios = g_slist_append(device->attios, attio);
+
+	if (device->auto_id == 0)
 		device->auto_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
 						att_connect, device,
 						att_connect_dispatched);
-
-		device->attios = g_slist_append(device->attios, attio);
-	}
 
 	return attio->id;
 }
@@ -3131,6 +3142,11 @@ gboolean btd_device_remove_attio_callback(struct btd_device *device, guint id)
 
 	if (device->attios != NULL || device->attios_offline != NULL)
 		return TRUE;
+
+	if (device->auto_id) {
+		g_source_remove(device->auto_id);
+		device->auto_id = 0;
+	}
 
 	att_cleanup(device);
 

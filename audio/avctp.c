@@ -40,6 +40,7 @@
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/sdp.h>
+#include <bluetooth/uuid.h>
 
 #include <glib.h>
 
@@ -320,7 +321,7 @@ static struct avctp_pdu_handler *find_handler(GSList *list, uint8_t opcode)
 
 static void avctp_disconnected(struct avctp *session)
 {
-	struct avctp_server *server = session->server;
+	struct avctp_server *server;
 
 	if (!session)
 		return;
@@ -356,6 +357,7 @@ static void avctp_disconnected(struct avctp *session)
 		session->uinput = -1;
 	}
 
+	server = session->server;
 	server->sessions = g_slist_remove(server->sessions, session);
 	g_slist_free_full(session->handlers, g_free);
 	g_free(session);
@@ -821,8 +823,6 @@ int avctp_register(const bdaddr_t *src, gboolean master)
 	struct avctp_server *server;
 
 	server = g_new0(struct avctp_server, 1);
-	if (!server)
-		return -ENOMEM;
 
 	server->io = avctp_server_socket(src, master);
 	if (!server->io) {
@@ -981,7 +981,7 @@ int avctp_send_vendordep_req(struct avctp *session, uint8_t code,
 	struct avctp_rsp_handler *handler;
 	int err;
 
-	err = avctp_send(session, id++, AVCTP_COMMAND, code, subunit,
+	err = avctp_send(session, id, AVCTP_COMMAND, code, subunit,
 				AVC_OP_VENDORDEP, operands, operand_count);
 	if (err < 0)
 		return err;
@@ -992,6 +992,8 @@ int avctp_send_vendordep_req(struct avctp *session, uint8_t code,
 	handler->user_data = user_data;
 
 	session->handlers = g_slist_prepend(session->handlers, handler);
+
+	id++;
 
 	return 0;
 }
