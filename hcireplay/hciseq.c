@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include "hciseq.h"
 #include "hcireplay.h"
-#include "parser/parser.h"
 
 int find_by_opcode(struct framenode *start, struct framenode **ptr, uint16_t opcode) {
 	unsigned int pos;
