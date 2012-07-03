@@ -39,10 +39,6 @@ int skipped = 0;
 int timing = TIMING_NONE;
 double factor = 1;
 
-static void process_in();
-static void process_out();
-static void process_next();
-
 __useconds_t timeval_diff(struct timeval *l, struct timeval *r, struct timeval *diff) {
 	int tmpsec;
 	static struct timeval tmp;
@@ -371,43 +367,6 @@ static int replay_acl_out() {
 	return 0;
 }
 
-static void process() {
-	__useconds_t delay;
-	struct timeval last;
-
-	gettimeofday(&last, NULL);
-	do {
-		/* delay */
-		if(timing == TIMING_DELTA) {
-			/* consider exec time of process_out()/process_in() */
-			get_rel_ts(&last, &last);
-			if(timeval_cmp(&dumpseq.current->ts_diff, &last) >= 0) {
-				delay = timeval_diff(&dumpseq.current->ts_diff, &last, NULL);
-				delay *= factor;
-				if(usleep(delay) == -1) {
-					printf("[E] Delay failed\n");
-				}
-			} else {
-				/* exec time was longer than delay */
-				printf("[W] Packet delay\n");
-			}
-			gettimeofday(&last, NULL);
-		}
-
-		if(dumpseq.current->frame->in == 1) {
-			process_out();
-		} else {
-			process_in();
-		}
-
-		dumpseq.current = dumpseq.current->next;
-		pos++;
-	} while(dumpseq.current != NULL);
-
-	printf("Done\n");
-	printf("Processed %d out of %d\n", dumpseq.len-skipped, dumpseq.len);
-}
-
 static void process_in() {
 	static struct frame frm;
 	static uint8_t data[HCI_MAX_FRAME_SIZE];
@@ -460,6 +419,43 @@ static void process_out() {
 		printf("Unsupported packet 0x%2.2x\n", pkt_type);
 		break;
 	}
+}
+
+static void process() {
+	__useconds_t delay;
+	struct timeval last;
+
+	gettimeofday(&last, NULL);
+	do {
+		/* delay */
+		if(timing == TIMING_DELTA) {
+			/* consider exec time of process_out()/process_in() */
+			get_rel_ts(&last, &last);
+			if(timeval_cmp(&dumpseq.current->ts_diff, &last) >= 0) {
+				delay = timeval_diff(&dumpseq.current->ts_diff, &last, NULL);
+				delay *= factor;
+				if(usleep(delay) == -1) {
+					printf("[E] Delay failed\n");
+				}
+			} else {
+				/* exec time was longer than delay */
+				printf("[W] Packet delay\n");
+			}
+			gettimeofday(&last, NULL);
+		}
+
+		if(dumpseq.current->frame->in == 1) {
+			process_out();
+		} else {
+			process_in();
+		}
+
+		dumpseq.current = dumpseq.current->next;
+		pos++;
+	} while(dumpseq.current != NULL);
+
+	printf("Done\n");
+	printf("Processed %d out of %d\n", dumpseq.len-skipped, dumpseq.len);
 }
 
 static int vhci_open() {
