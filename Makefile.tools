@@ -76,6 +76,7 @@ hcireplay_hcireplay_SOURCES = hcireplay/hcireplay.c \
 					monitor/btsnoop.h monitor/btsnoop.c \
 					monitor/control.h monitor/control.c \
 					monitor/mainloop.h monitor/mainloop.c \
+					emulator/btdev.h emulator/btdev.c \
 					lib/hci.h
 					
 hcireplay_hcireplay_LDADD = lib/libbluetooth-private.la

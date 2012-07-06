@@ -22,6 +22,7 @@
 #include "monitor/btsnoop.h"
 #include "monitor/control.h"
 #include "monitor/packet.h"
+#include "emulator/btdev.h"
 #include "../config.h"
 
 #define TIMING_NONE 0
@@ -42,6 +43,8 @@ int timeout = -1;
 int skipped = 0;
 int timing = TIMING_NONE;
 double factor = 1;
+
+struct btdev *btdev;
 
 __useconds_t timeval_diff(struct timeval *l, struct timeval *r, struct timeval *diff) {
 	int tmpsec;
@@ -272,6 +275,7 @@ static int parse_dump(int fd, struct hciseq *seq, unsigned long flags)
 		nodeptr = malloc(sizeof(struct framenode));
 		nodeptr->frame = frm;
 		nodeptr->attr = (struct hciseq_attr*) malloc(sizeof(struct hciseq_attr));
+		nodeptr->attr->action = HCISEQ_ACTION_REPLAY;
 
 		if(last == NULL) {
 			seq->frames = nodeptr;
@@ -321,6 +325,20 @@ static int recv_frm(int fd, struct frame *frm) {
 	}
 
 	return n;
+}
+
+void btdev_send (const void *data, uint16_t len, void *user_data) {
+	struct frame frm;
+	frm.data = data;
+	frm.len = len;
+	frm.data_len = len;
+	printf("> (emulated)\n", pos, dumpseq.len);
+	send_frm(&frm);
+}
+
+void btdev_recv(struct frame *frm) {
+	printf("< [%d/%d] (emulated)\n", pos, dumpseq.len);
+	btdev_receive_h4(btdev, frm->data, frm->len);
 }
 
 static int replay_cmd(const void *data, int len) {
@@ -391,6 +409,11 @@ static void process_in() {
 		return;
 	}
 
+	if(dumpseq.current->attr->action == HCISEQ_ACTION_EMULATE) {
+		btdev_recv(&frm);
+		return;
+	}
+
 	pkt_type = ((const uint8_t *) data)[0];
 	switch (pkt_type) {
 	case BT_H4_CMD_PKT:
@@ -410,6 +433,10 @@ static void process_in() {
 
 static void process_out() {
 	uint8_t pkt_type;
+
+	if(dumpseq.current->attr->action == HCISEQ_ACTION_EMULATE) {
+		return;
+	}
 
 	pkt_type = ((const uint8_t *) dumpseq.current->frame->data)[0];
 
@@ -598,6 +625,10 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 	}
+
+	/* init emulator */
+	btdev = btdev_create(0);
+	btdev_set_send_handler(btdev, btdev_send, NULL);
 
 	gettimeofday(&start, NULL);
 	printf("Running.\n");
