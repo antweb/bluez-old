@@ -11,6 +11,7 @@
 #include <sys/epoll.h>
 #include <sys/time.h>
 #include <getopt.h>
+#include <stdbool.h>
 
 #include "lib/bluetooth.h"
 #include "lib/hci.h"
@@ -21,11 +22,14 @@
 #include "monitor/btsnoop.h"
 #include "monitor/control.h"
 #include "monitor/packet.h"
+#include "../config.h"
 
 #define TIMING_NONE 0
 #define TIMING_DELTA 1
 
 struct hciseq dumpseq;
+struct hciseq_type_cfg type_cfg;
+
 int fd;
 int pos = 1;
 struct timeval start;
@@ -267,6 +271,7 @@ static int parse_dump(int fd, struct hciseq *seq, unsigned long flags)
 
 		nodeptr = malloc(sizeof(struct framenode));
 		nodeptr->frame = frm;
+		nodeptr->attr = (struct hciseq_attr*) malloc(sizeof(struct hciseq_attr));
 
 		if(last == NULL) {
 			seq->frames = nodeptr;
@@ -431,8 +436,8 @@ static void process() {
 		if(timing == TIMING_DELTA) {
 			/* consider exec time of process_out()/process_in() */
 			get_rel_ts(&last, &last);
-			if(timeval_cmp(&dumpseq.current->ts_diff, &last) >= 0) {
-				delay = timeval_diff(&dumpseq.current->ts_diff, &last, NULL);
+			if(timeval_cmp(&dumpseq.current->attr->ts_diff, &last) >= 0) {
+				delay = timeval_diff(&dumpseq.current->attr->ts_diff, &last, NULL);
 				delay *= factor;
 				if(usleep(delay) == -1) {
 					printf("[E] Delay failed\n");
@@ -489,6 +494,7 @@ static void delete_list() {
 
 		free(tmp->frame->data);
 		free(tmp->frame);
+		free(tmp->attr);
 		free(tmp);
 	}
 }
@@ -501,6 +507,7 @@ static void usage(void)
 		"\t-d, --timing={none|delta}    Specify timing mode\n"
 		"\t-m, --factor=<value>         Use timing modifier\n"
 		"\t-t, --timeout=<value>        Use timeout when receiving\n"
+		"\t-c, --config=<file>          Use config file\n"
 		"\t-v, --version                Give version information\n"
 		"\t-h, --help                   Give a short usage message\n");
 }
@@ -509,6 +516,7 @@ static const struct option main_options[] = {
 	{ "timing",	required_argument,		NULL, 'd'	},
 	{ "factor",	required_argument,		NULL, 'm'	},
 	{ "timeout",	required_argument,	NULL, 't'	},
+	{ "config",	required_argument,	    NULL, 'c'	},
 	{ "version",	no_argument,		NULL, 'v'	},
 	{ "help",	no_argument,			NULL, 'h'	},
 	{ }
@@ -520,11 +528,12 @@ int main(int argc, char *argv[])
 
 	int dumpfd;
 	int i,j;
+	char *config = NULL;
 
 	while(1) {
 		int opt;
 
-		opt = getopt_long(argc, argv, "d:m:t:vh", main_options, NULL);
+		opt = getopt_long(argc, argv, "d:m:t:c:vh", main_options, NULL);
 		if (opt < 0)
 			break;
 
@@ -541,6 +550,9 @@ int main(int argc, char *argv[])
 			break;
 		case 't':
 			timeout = atoi(optarg);
+			break;
+		case 'c':
+			config = optarg;
 			break;
 		case 'v':
 			printf("%s\n", VERSION);
@@ -577,11 +589,17 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 	}
-
 	dumpseq.current = dumpseq.frames;
 	calc_rel_ts(&dumpseq);
-	gettimeofday(&start, NULL);
 
+	if(config != NULL) {
+		if(parse_config(config, &dumpseq, &type_cfg, false)) {
+			vhci_close();
+			return 1;
+		}
+	}
+
+	gettimeofday(&start, NULL);
 	printf("Running.\n");
 
 	process();

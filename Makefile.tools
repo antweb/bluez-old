@@ -71,10 +71,12 @@ emulator_btvirt_SOURCES = emulator/main.c monitor/bt.h \
 
 hcireplay_hcireplay_SOURCES = hcireplay/hcireplay.c \
 					hcireplay/hciseq.h hcireplay/hciseq.c \
+					hcireplay/config.h hcireplay/config.c \
 					monitor/packet.h monitor/packet.c \
 					monitor/btsnoop.h monitor/btsnoop.c \
 					monitor/control.h monitor/control.c \
-					monitor/mainloop.h monitor/mainloop.c
+					monitor/mainloop.h monitor/mainloop.c \
+					lib/hci.h
 					
 hcireplay_hcireplay_LDADD = lib/libbluetooth-private.la
 

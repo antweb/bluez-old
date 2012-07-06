@@ -31,14 +31,14 @@ void calc_rel_ts(struct hciseq *seq) {
 	tmp = seq->current;
 
 	/* first packet */
-	tmp->ts_rel.tv_sec = 0;
-	tmp->ts_rel.tv_usec = 0;
-	tmp->ts_diff.tv_sec = 0;
-	tmp->ts_diff.tv_usec = 0;
+	tmp->attr->ts_rel.tv_sec = 0;
+	tmp->attr->ts_rel.tv_usec = 0;
+	tmp->attr->ts_diff.tv_sec = 0;
+	tmp->attr->ts_diff.tv_usec = 0;
 
 	while(tmp->next != NULL) {
-		timeval_diff(&tmp->next->frame->ts, &start, &tmp->next->ts_rel);
-		timeval_diff(&tmp->next->frame->ts, &tmp->frame->ts, &tmp->next->ts_diff);
+		timeval_diff(&tmp->next->frame->ts, &start, &tmp->next->attr->ts_rel);
+		timeval_diff(&tmp->next->frame->ts, &tmp->frame->ts, &tmp->next->attr->ts_diff);
 		tmp = tmp->next;
 	}
 }

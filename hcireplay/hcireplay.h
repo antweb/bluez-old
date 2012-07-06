@@ -73,6 +73,12 @@ struct frame {
 	int		audio_fd;
 };
 
+struct hciseq_type_cfg {
+	struct hciseq_attr *cmd[8223];
+	struct hciseq_attr *evt[256];
+	struct hciseq_attr *acl;
+};
+
 __useconds_t timeval_diff(struct timeval *l, struct timeval *r, struct timeval *diff);
 
 #endif
