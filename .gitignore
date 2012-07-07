@@ -87,6 +87,7 @@ unit/test-eir
 tools/btmgmt
 monitor/btmon
 emulator/btvirt
+tools/hcireplay/hcireplay
 
 doc/*.bak
 doc/*.stamp
@@ -98,5 +99,3 @@ doc/xml
 doc/html
 src/bluetoothd.8
 src/bluetooth.service
-
-hcireplay/hcireplay
