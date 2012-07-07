@@ -23,7 +23,7 @@
 #include "monitor/control.h"
 #include "monitor/packet.h"
 #include "emulator/btdev.h"
-#include "../config.h"
+#include "../../config.h"
 
 #define TIMING_NONE 0
 #define TIMING_DELTA 1
@@ -243,8 +243,8 @@ static int parse_dump(int fd, struct hciseq *seq, unsigned long flags)
 	int n;
 
 	int count;
-	struct framenode *nodeptr;
-	struct framenode *last;
+	struct hciseq_node *nodeptr;
+	struct hciseq_node *last;
 	last = seq->current;
 
 	if (flags & DUMP_BTSNOOP) {
@@ -272,7 +272,7 @@ static int parse_dump(int fd, struct hciseq *seq, unsigned long flags)
 		frm->ptr = frm->data;
 		frm->len = frm->data_len;
 
-		nodeptr = malloc(sizeof(struct framenode));
+		nodeptr = malloc(sizeof(struct hciseq_node));
 		nodeptr->frame = frm;
 		nodeptr->attr = (struct hciseq_attr*) malloc(sizeof(struct hciseq_attr));
 		nodeptr->attr->action = HCISEQ_ACTION_REPLAY;
@@ -349,7 +349,7 @@ static int replay_cmd(const void *data, int len) {
 	const struct bt_hci_cmd_hdr *hdr_cur = frm_cur->data+1;
 	uint16_t opcode_in;
 	uint16_t opcode_cur;
-	struct framenode *frm_ptr;
+	struct hciseq_node *frm_ptr;
 	int npos;
 
 	opcode_in = le16_to_cpu(hdr_in->opcode);
@@ -512,7 +512,7 @@ static int vhci_close() {
 }
 
 static void delete_list() {
-	struct framenode *node, *tmp;
+	struct hciseq_node *node, *tmp;
 
 	node = dumpseq.frames;
 	while(node != NULL) {
