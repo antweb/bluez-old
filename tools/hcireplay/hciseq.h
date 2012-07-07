@@ -10,8 +10,8 @@ enum hciseq_action {
 };
 
 struct hciseq {
-	struct framenode *frames;
-	struct framenode *current;
+	struct hciseq_node *frames;
+	struct hciseq_node *current;
 	int len;
 };
 
@@ -21,13 +21,13 @@ struct hciseq_attr {
 	enum hciseq_action action;
 };
 
-struct framenode {
+struct hciseq_node {
 	struct frame *frame;
-	struct framenode *next;
+	struct hciseq_node *next;
 	struct hciseq_attr *attr;
 };
 
-int find_by_opcode(struct framenode *start, struct framenode **ptr, uint16_t opcode);
+int find_by_opcode(struct hciseq_node *start, struct hciseq_node **ptr, uint16_t opcode);
 void calc_rel_ts();
 
 #endif

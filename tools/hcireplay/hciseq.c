@@ -3,9 +3,9 @@
 #include "hciseq.h"
 #include "hcireplay.h"
 
-int find_by_opcode(struct framenode *start, struct framenode **ptr, uint16_t opcode) {
+int find_by_opcode(struct hciseq_node *start, struct hciseq_node **ptr, uint16_t opcode) {
 	unsigned int pos;
-	struct framenode *tmp;
+	struct hciseq_node *tmp;
 	uint16_t opcode_next;
 
 	pos = 1;
@@ -25,7 +25,7 @@ int find_by_opcode(struct framenode *start, struct framenode **ptr, uint16_t opc
 
 void calc_rel_ts(struct hciseq *seq) {
 	struct timeval start;
-	struct framenode *tmp;
+	struct hciseq_node *tmp;
 
 	start = seq->current->frame->ts;
 	tmp = seq->current;

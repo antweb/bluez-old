@@ -173,7 +173,7 @@ static int apply_attr_scope(struct scope_list *scope, struct attr_list *attr) {
 static struct scope_list* get_scope_range(int from, int to) {
 	struct scope_list *list = NULL;
 	struct scope_node *scope_node;
-	struct framenode *seq_node = seq->current;
+	struct hciseq_node *seq_node = seq->current;
 	int pos = 1;
 
 
@@ -215,7 +215,7 @@ err:
 static struct scope_list* get_scope_type(uint8_t type, void *filter1, void *filter2) {
 	struct scope_list *list = NULL;
 	struct scope_node *scope_node;
-	struct framenode *seq_node = seq->current;
+	struct hciseq_node *seq_node = seq->current;
 	uint16_t opcode, node_opcode;
 	uint8_t ogf, node_ogf;
 	uint16_t ocf, node_ocf;
