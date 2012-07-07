@@ -46,10 +46,8 @@
 #include "../src/device.h"
 
 #include "error.h"
-#include "ipc.h"
 #include "dbus-common.h"
 #include "device.h"
-#include "unix.h"
 #include "avdtp.h"
 #include "control.h"
 #include "avctp.h"
@@ -711,8 +709,6 @@ gboolean audio_device_is_active(struct audio_device *dev,
 
 void audio_device_unregister(struct audio_device *device)
 {
-	unix_device_removed(device);
-
 	if (device->hs_preauth_id) {
 		g_source_remove(device->hs_preauth_id);
 		device->hs_preauth_id = 0;

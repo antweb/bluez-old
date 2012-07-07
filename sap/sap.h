@@ -26,6 +26,12 @@
 #include <stdint.h>
 #include <glib.h>
 
+#ifdef SAP_DEBUG
+#define SAP_VDBG(fmt, arg...) DBG(fmt, arg)
+#else
+#define SAP_VDBG(fmt...)
+#endif
+
 #define SAP_VERSION 0x0101
 
 /* Connection Status - SAP v1.1 section 5.2.2 */
@@ -40,8 +46,7 @@ enum sap_status {
 /* Disconnection Type - SAP v1.1 section 5.2.3 */
 enum sap_disconnection_type {
 	SAP_DISCONNECTION_TYPE_GRACEFUL		= 0x00,
-	SAP_DISCONNECTION_TYPE_IMMEDIATE	= 0x01,
-	SAP_DISCONNECTION_TYPE_CLIENT		= 0xFF
+	SAP_DISCONNECTION_TYPE_IMMEDIATE	= 0x01
 };
 
 /* Result codes - SAP v1.1 section 5.2.4 */
@@ -157,7 +162,7 @@ void sap_set_transport_protocol_req(void *sap_device,
 					struct sap_parameter *param);
 
 /*SAP responses to SAP requests. Implemented by server.c */
-int sap_connect_rsp(void *sap_device, uint8_t status, uint16_t maxmsgsize);
+int sap_connect_rsp(void *sap_device, uint8_t status);
 int sap_disconnect_rsp(void *sap_device);
 int sap_transfer_apdu_rsp(void *sap_device, uint8_t result,
 				uint8_t *sap_apdu_resp, uint16_t length);
@@ -168,7 +173,6 @@ int sap_power_sim_on_rsp(void *sap_device, uint8_t result);
 int sap_reset_sim_rsp(void *sap_device, uint8_t result);
 int sap_transfer_card_reader_status_rsp(void *sap_device, uint8_t result,
 						uint8_t status);
-int sap_error_rsp(void *sap_device);
 int sap_transport_protocol_rsp(void *sap_device, uint8_t result);
 
 /* Event indication. Implemented by server.c*/

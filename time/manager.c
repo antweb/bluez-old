@@ -2,7 +2,8 @@
  *
  *  BlueZ - Bluetooth protocol stack for Linux
  *
- *  Copyright (C) 2003-2010  Marcel Holtmann <marcel@holtmann.org>
+ *  Copyright (C) 2012  Nokia Corporation
+ *  Copyright (C) 2012  Marcel Holtmann <marcel@holtmann.org>
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -21,10 +22,28 @@
  *
  */
 
-#define L2CAP_PSM_HIDP_CTRL 0x11
-#define L2CAP_PSM_HIDP_INTR 0x13
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
-int epox_presenter(const bdaddr_t *src, const bdaddr_t *dst, uint8_t channel);
-int headset_presenter(const bdaddr_t *src, const bdaddr_t *dst, uint8_t channel);
-int jthree_keyboard(const bdaddr_t *src, const bdaddr_t *dst, uint8_t channel);
-int celluon_keyboard(const bdaddr_t *src, const bdaddr_t *dst, uint8_t channel);
+#include "adapter.h"
+#include "manager.h"
+#include "server.h"
+
+struct btd_adapter_driver time_server_driver = {
+	.name = "gatt-time-server",
+	.probe = time_server_init,
+	.remove = time_server_exit,
+};
+
+int time_manager_init(void)
+{
+	btd_register_adapter_driver(&time_server_driver);
+
+	return 0;
+}
+
+void time_manager_exit(void)
+{
+	btd_unregister_adapter_driver(&time_server_driver);
+}

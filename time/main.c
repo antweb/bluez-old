@@ -33,7 +33,7 @@
 #include "plugin.h"
 #include "hcid.h"
 #include "log.h"
-#include "server.h"
+#include "manager.h"
 
 static int time_init(void)
 {
@@ -42,7 +42,7 @@ static int time_init(void)
 		return -ENOTSUP;
 	}
 
-	return time_server_init();
+	return time_manager_init();
 }
 
 static void time_exit(void)
@@ -50,7 +50,7 @@ static void time_exit(void)
 	if (!main_opts.gatt_enabled)
 		return;
 
-	time_server_exit();
+	time_manager_exit();
 }
 
 BLUETOOTH_PLUGIN_DEFINE(time, VERSION,

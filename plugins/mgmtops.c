@@ -1072,11 +1072,12 @@ static void read_info_complete(int sk, uint16_t index, void *buf, size_t len)
 		return;
 	}
 
-	if (mode != MODE_OFF && !mgmt_powered(info->current_settings))
-		mgmt_set_powered(index, TRUE);
-	else {
-		get_connections(sk, index);
-		btd_adapter_start(adapter);
+	if (mode != MODE_OFF) {
+		if (mgmt_powered(info->current_settings)) {
+			get_connections(sk, index);
+			btd_adapter_start(adapter);
+		} else
+			mgmt_set_powered(index, TRUE);
 	}
 
 	btd_adapter_unref(adapter);
@@ -2157,17 +2158,6 @@ static int mgmt_unpair_device(int index, bdaddr_t *bdaddr, uint8_t bdaddr_type)
 	return 0;
 }
 
-static int mgmt_encrypt_link(int index, bdaddr_t *dst, bt_hci_result_t cb,
-							gpointer user_data)
-{
-	char addr[18];
-
-	ba2str(dst, addr);
-	DBG("index %d addr %s", index, addr);
-
-	return -ENOSYS;
-}
-
 static int mgmt_set_did(int index, uint16_t vendor, uint16_t product,
 					uint16_t version, uint16_t source)
 {
@@ -2192,20 +2182,6 @@ static int mgmt_set_did(int index, uint16_t vendor, uint16_t product,
 		return -errno;
 
 	return 0;
-}
-
-static int mgmt_disable_cod_cache(int index)
-{
-	DBG("index %d", index);
-
-	/* The cache control is handled automatically for mgmt */
-	return 0;
-}
-
-static int mgmt_restore_powered(int index)
-{
-	DBG("index %d", index);
-	return -ENOSYS;
 }
 
 static int mgmt_load_link_keys(int index, GSList *keys, gboolean debug_keys)
@@ -2492,12 +2468,9 @@ static struct btd_adapter_ops mgmt_ops = {
 	.pincode_reply = mgmt_pincode_reply,
 	.confirm_reply = mgmt_confirm_reply,
 	.passkey_reply = mgmt_passkey_reply,
-	.encrypt_link = mgmt_encrypt_link,
 	.set_did = mgmt_set_did,
 	.add_uuid = mgmt_add_uuid,
 	.remove_uuid = mgmt_remove_uuid,
-	.disable_cod_cache = mgmt_disable_cod_cache,
-	.restore_powered = mgmt_restore_powered,
 	.load_keys = mgmt_load_link_keys,
 	.set_io_capability = mgmt_set_io_capability,
 	.create_bonding = mgmt_create_bonding,

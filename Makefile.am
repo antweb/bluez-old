@@ -151,8 +151,6 @@ builtin_sources += audio/main.c \
 			audio/sink.h audio/sink.c \
 			audio/a2dp.h audio/a2dp.c \
 			audio/avdtp.h audio/avdtp.c \
-			audio/ipc.h audio/ipc.c \
-			audio/unix.h audio/unix.c \
 			audio/media.h audio/media.c \
 			audio/transport.h audio/transport.c \
 			audio/telephony.h audio/a2dp-codecs.h
@@ -226,6 +224,7 @@ builtin_sources += thermometer/main.c \
 			thermometer/thermometer.h thermometer/thermometer.c \
 			alert/main.c alert/server.h alert/server.c \
 			time/main.c time/server.h time/server.c \
+			time/manager.h time/manager.c \
 			plugins/gatt-example.c \
 			proximity/main.c proximity/manager.h proximity/manager.c \
 			proximity/monitor.h proximity/monitor.c \
@@ -238,8 +237,8 @@ builtin_sources += thermometer/main.c \
 endif
 
 
-builtin_modules += hciops mgmtops
-builtin_sources += plugins/hciops.c plugins/mgmtops.c
+builtin_modules += mgmtops
+builtin_sources += plugins/mgmtops.c
 
 if HAL
 builtin_modules += hal
@@ -336,35 +335,6 @@ EXTRA_DIST += src/genbuiltin src/bluetooth.conf src/org.bluez.service \
 			audio/telephony-maemo6.c sap/sap-dummy.c sap/sap-u8500.c \
 			proximity/proximity.conf
 
-if ALSA
-alsadir = $(libdir)/alsa-lib
-
-alsa_LTLIBRARIES = audio/libasound_module_pcm_bluetooth.la \
-				audio/libasound_module_ctl_bluetooth.la
-
-audio_libasound_module_pcm_bluetooth_la_SOURCES = audio/pcm_bluetooth.c \
-					audio/rtp.h audio/ipc.h audio/ipc.c
-audio_libasound_module_pcm_bluetooth_la_LDFLAGS = $(AM_LDFLAGS) -module \
-						  -avoid-version
-audio_libasound_module_pcm_bluetooth_la_LIBADD = sbc/libsbc.la \
-					lib/libbluetooth-private.la @ALSA_LIBS@
-audio_libasound_module_pcm_bluetooth_la_CFLAGS = $(AM_CFLAGS) @ALSA_CFLAGS@
-
-audio_libasound_module_ctl_bluetooth_la_SOURCES = audio/ctl_bluetooth.c \
-					audio/rtp.h audio/ipc.h audio/ipc.c
-audio_libasound_module_ctl_bluetooth_la_LDFLAGS = $(AM_LDFLAGS) -module \
-						  -avoid-version
-audio_libasound_module_ctl_bluetooth_la_LIBADD = \
-					lib/libbluetooth-private.la @ALSA_LIBS@
-audio_libasound_module_ctl_bluetooth_la_CFLAGS = $(AM_CFLAGS) @ALSA_CFLAGS@
-
-if DATAFILES
-alsaconfdir = $(datadir)/alsa
-
-alsaconf_DATA = audio/bluetooth.conf
-endif
-endif
-
 if AUDIOPLUGIN
 if GSTREAMER
 gstreamerdir = $(libdir)/gstreamer-0.10
@@ -378,8 +348,7 @@ audio_libgstbluetooth_la_SOURCES = audio/gstbluetooth.c audio/gstpragma.h \
 				audio/gstavdtpsink.h audio/gstavdtpsink.c \
 				audio/gsta2dpsink.h audio/gsta2dpsink.c \
 				audio/gstsbcutil.h audio/gstsbcutil.c \
-				audio/gstrtpsbcpay.h audio/gstrtpsbcpay.c \
-				audio/rtp.h audio/ipc.h audio/ipc.c
+				audio/gstrtpsbcpay.h audio/gstrtpsbcpay.c
 audio_libgstbluetooth_la_LDFLAGS = $(AM_LDFLAGS) -module -avoid-version
 audio_libgstbluetooth_la_LIBADD = sbc/libsbc.la lib/libbluetooth-private.la \
 						@DBUS_LIBS@ @GSTREAMER_LIBS@ \
@@ -388,9 +357,6 @@ audio_libgstbluetooth_la_CFLAGS = -fvisibility=hidden -fno-strict-aliasing \
                                $(AM_CFLAGS) @DBUS_CFLAGS@ @GSTREAMER_CFLAGS@
 endif
 endif
-
-EXTRA_DIST += audio/bluetooth.conf
-
 
 include Makefile.tools
 

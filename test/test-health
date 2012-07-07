@@ -134,7 +134,7 @@ if not con:
 manager = dbus.Interface(bus.get_object("org.bluez", "/"),
 						"org.bluez.Manager")
 
-adapters = manager.ListAdapters()
+adapters = manager.GetProperties()["Adapters"]
 
 i = 1
 for ad in adapters:
@@ -157,7 +157,7 @@ while select == None:
 adapter =  dbus.Interface(bus.get_object("org.bluez", select),
 						"org.bluez.Adapter")
 
-devices = adapter.ListDevices()
+devices = adapter.GetProperties()["Devices"]
 
 if len(devices) == 0:
 	print("No devices available")

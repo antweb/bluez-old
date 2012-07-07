@@ -38,12 +38,6 @@
 #define STE_SIMD_SOCK  "/dev/socket/catd_a"
 #define STE_CLIENT_TAG 0x0000
 
-#ifdef STE_SAP_DEBUG
-#define DBG_VERBOSE(fmt, arg...) DBG(fmt, arg)
-#else
-#define DBG_VERBOSE(fmt...)
-#endif
-
 #define sap_error(fmt, arg...) do { \
 	error("STE U8500 SAP: " fmt, ## arg); \
 	} while (0)
@@ -264,7 +258,7 @@ static int send_message(GIOChannel *io, void *buf, size_t size)
 {
 	gsize written;
 
-	DBG_VERBOSE("io %p, size %zu", io, size);
+	SAP_VDBG("io %p, size %zu", io, size);
 
 	if (g_io_channel_write_chars(io, buf, size, &written, NULL) !=
 							G_IO_STATUS_NORMAL)
@@ -280,7 +274,7 @@ static int send_request(GIOChannel *io, uint16_t id,
 	struct ste_message *msg;
 	size_t size = sizeof(*msg);
 
-	DBG_VERBOSE("io %p", io);
+	SAP_VDBG("io %p", io);
 
 	if (param)
 		size += param->len;
@@ -385,8 +379,7 @@ static void recv_sim_ready(void)
 	sap_info("sim is ready. Try to connect again");
 
 	if (send_request(u8500.io, STE_START_SAP_REQ, NULL) < 0) {
-		sap_connect_rsp(u8500.sap_data, SAP_STATUS_CONNECTION_FAILED,
-								SAP_BUF_SIZE);
+		sap_connect_rsp(u8500.sap_data, SAP_STATUS_CONNECTION_FAILED);
 		simd_close();
 	}
 }
@@ -396,21 +389,18 @@ static void recv_connect_rsp(uint32_t status)
 	switch (status) {
 	case STE_STATUS_OK:
 		if (u8500.state != STE_SIM_BUSY)
-			sap_connect_rsp(u8500.sap_data,
-					SAP_STATUS_OK, 0);
+			sap_connect_rsp(u8500.sap_data, SAP_STATUS_OK);
 		break;
 	case STE_STATUS_BUSY_CALL:
 		if (u8500.state != STE_SIM_BUSY) {
 			sap_connect_rsp(u8500.sap_data,
-				SAP_STATUS_OK_ONGOING_CALL,
-				SAP_BUF_SIZE);
+						SAP_STATUS_OK_ONGOING_CALL);
 
 			u8500.state = STE_SIM_BUSY;
 		}
 		break;
 	default:
-		sap_connect_rsp(u8500.sap_data,
-				SAP_STATUS_CONNECTION_FAILED, 0);
+		sap_connect_rsp(u8500.sap_data, SAP_STATUS_CONNECTION_FAILED);
 		simd_close();
 		break;
 	}
@@ -421,7 +411,7 @@ static void recv_response(struct ste_message *msg)
 	uint32_t status;
 	uint8_t *param;
 
-	DBG_VERBOSE("msg_id 0x%x", msg->id);
+	SAP_VDBG("msg_id 0x%x", msg->id);
 
 	if (msg->id == STE_END_SAP_RSP) {
 		sap_disconnect_rsp(u8500.sap_data);
@@ -433,7 +423,7 @@ static void recv_response(struct ste_message *msg)
 	status = *(uint32_t *)param;
 	param += sizeof(status);
 
-	DBG_VERBOSE("status 0x%x", status);
+	SAP_VDBG("status 0x%x", status);
 
 	switch (msg->id) {
 	case STE_START_SAP_RSP:
@@ -487,7 +477,7 @@ static int recv_message(void *buf, size_t size)
 	struct ste_message *msg = buf;
 
 	do {
-		DBG_VERBOSE("size %zu msg->len %u.", size, msg->len);
+		SAP_VDBG("size %zu msg->len %u.", size, msg->len);
 
 		if (size < sizeof(*msg)) {
 			sap_error("invalid message received (%zu bytes)", size);
@@ -608,13 +598,12 @@ void sap_connect_req(void *sap_device, uint16_t maxmsgsize)
 	sap_info("connect request");
 
 	if (simd_connect(sap_device) < 0) {
-		sap_connect_rsp(sap_device, SAP_STATUS_CONNECTION_FAILED, 0);
+		sap_connect_rsp(sap_device, SAP_STATUS_CONNECTION_FAILED);
 		return;
 	}
 
 	if (send_request(u8500.io, STE_START_SAP_REQ, NULL) < 0) {
-		sap_connect_rsp(sap_device, SAP_STATUS_CONNECTION_FAILED,
-								SAP_BUF_SIZE);
+		sap_connect_rsp(sap_device, SAP_STATUS_CONNECTION_FAILED);
 		simd_close();
 	}
 }
@@ -646,7 +635,7 @@ void sap_transfer_apdu_req(void *sap_device, struct sap_parameter *param)
 {
 	uint8_t result;
 
-	DBG_VERBOSE("sap_device %p param %p", sap_device, param);
+	SAP_VDBG("sap_device %p param %p", sap_device, param);
 
 	if (u8500.state != STE_ENABLED) {
 		result = get_sap_result(STE_SEND_APDU_MSG, STE_STATUS_FAILURE);

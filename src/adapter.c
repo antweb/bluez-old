@@ -109,6 +109,7 @@ struct service_auth {
 struct btd_adapter {
 	uint16_t dev_id;
 	gboolean up;
+	gboolean already_up;
 	char *path;			/* adapter object path */
 	bdaddr_t bdaddr;		/* adapter Bluetooth Address */
 	uint32_t dev_class;		/* Class of Device */
@@ -1307,38 +1308,6 @@ static DBusMessage *release_session(DBusConnection *conn,
 	return dbus_message_new_method_return(msg);
 }
 
-static DBusMessage *list_devices(DBusConnection *conn,
-						DBusMessage *msg, void *data)
-{
-	struct btd_adapter *adapter = data;
-	DBusMessage *reply;
-	GSList *l;
-	DBusMessageIter iter;
-	DBusMessageIter array_iter;
-	const gchar *dev_path;
-
-	reply = dbus_message_new_method_return(msg);
-	if (!reply)
-		return NULL;
-
-	dbus_message_iter_init_append(reply, &iter);
-	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
-				DBUS_TYPE_OBJECT_PATH_AS_STRING, &array_iter);
-
-	for (l = adapter->devices; l; l = l->next) {
-		struct btd_device *device = l->data;
-
-		dev_path = device_get_path(device);
-
-		dbus_message_iter_append_basic(&array_iter,
-				DBUS_TYPE_OBJECT_PATH, &dev_path);
-	}
-
-	dbus_message_iter_close_container(&iter, &array_iter);
-
-	return reply;
-}
-
 static DBusMessage *cancel_device_creation(DBusConnection *conn,
 						DBusMessage *msg, void *data)
 {
@@ -1662,9 +1631,6 @@ static const GDBusMethodTable adapter_methods[] = {
 			adapter_start_discovery) },
 	{ GDBUS_ASYNC_METHOD("StopDiscovery", NULL, NULL,
 			adapter_stop_discovery) },
-	{ GDBUS_DEPRECATED_METHOD("ListDevices",
-			NULL, GDBUS_ARGS({ "devices", "ao" }),
-			list_devices) },
 	{ GDBUS_ASYNC_METHOD("CreateDevice",
 			GDBUS_ARGS({ "address", "s" }),
 			GDBUS_ARGS({ "device", "o" }),
@@ -2223,8 +2189,6 @@ void btd_adapter_start(struct btd_adapter *adapter)
 
 	call_adapter_powered_callbacks(adapter, TRUE);
 
-	adapter_ops->disable_cod_cache(adapter->dev_id);
-
 	info("Adapter %s has been enabled", adapter->path);
 }
 
@@ -2426,6 +2390,7 @@ void btd_adapter_unref(struct btd_adapter *adapter)
 gboolean adapter_init(struct btd_adapter *adapter, gboolean up)
 {
 	adapter->up = up;
+	adapter->already_up = up;
 
 	adapter->allow_name_changes = TRUE;
 
@@ -2506,7 +2471,8 @@ void adapter_remove(struct btd_adapter *adapter)
 	g_slist_free(adapter->pin_callbacks);
 
 	/* Return adapter to down state if it was not up on init */
-	adapter_ops->restore_powered(adapter->dev_id);
+	if (!adapter->already_up && adapter->up)
+		adapter_ops->set_powered(adapter->dev_id, FALSE);
 }
 
 uint16_t adapter_get_dev_id(struct btd_adapter *adapter)
@@ -2880,7 +2846,8 @@ void adapter_update_found_devices(struct btd_adapter *adapter,
 							eir_data.appearance);
 
 	if (eir_data.name != NULL && eir_data.name_complete)
-		write_device_name(&adapter->bdaddr, bdaddr, eir_data.name);
+		write_device_name(&adapter->bdaddr, bdaddr, bdaddr_type,
+								eir_data.name);
 
 	dev = adapter_search_found_devices(adapter, bdaddr);
 	if (dev) {
@@ -3511,12 +3478,6 @@ int btd_adapter_passkey_reply(struct btd_adapter *adapter, bdaddr_t *bdaddr,
 {
 	return adapter_ops->passkey_reply(adapter->dev_id, bdaddr, bdaddr_type,
 								passkey);
-}
-
-int btd_adapter_encrypt_link(struct btd_adapter *adapter, bdaddr_t *bdaddr,
-					bt_hci_result_t cb, gpointer user_data)
-{
-	return adapter_ops->encrypt_link(adapter->dev_id, bdaddr, cb, user_data);
 }
 
 int btd_adapter_set_did(struct btd_adapter *adapter, uint16_t vendor,

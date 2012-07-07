@@ -175,7 +175,7 @@ sbin_PROGRAMS += test/hciemu
 bin_PROGRAMS += test/l2test test/rctest
 
 noinst_PROGRAMS += test/gaptest test/sdptest test/scotest \
-			test/attest test/hstest test/avtest test/ipctest \
+			test/attest test/hstest test/avtest \
 					test/lmptest test/bdaddr test/agent \
 					test/btiotest test/test-textfile \
 					test/uuidtest test/mpris-player
@@ -200,9 +200,6 @@ test_avtest_LDADD = lib/libbluetooth-private.la
 
 test_lmptest_LDADD = lib/libbluetooth-private.la
 
-test_ipctest_SOURCES = test/ipctest.c audio/ipc.h audio/ipc.c
-test_ipctest_LDADD= @GLIB_LIBS@ sbc/libsbc.la
-
 test_bdaddr_SOURCES = test/bdaddr.c src/oui.h src/oui.c
 test_bdaddr_LDADD = lib/libbluetooth-private.la
 
@@ -226,7 +223,7 @@ else
 EXTRA_DIST += test/rctest.1 test/hciemu.1 test/bdaddr.8
 endif
 
-EXTRA_DIST += test/sap-client test/hsplay test/hsmicro \
+EXTRA_DIST += test/sap_client.py test/hsplay test/hsmicro \
 		test/dbusdef.py test/monitor-bluetooth test/list-devices \
 		test/test-discovery test/test-manager test/test-adapter \
 		test/test-device test/test-service test/test-serial \
@@ -238,42 +235,3 @@ EXTRA_DIST += test/sap-client test/hsplay test/hsmicro \
 		test/service-record.dtd test/service-did.xml \
 		test/service-spp.xml test/service-opp.xml test/service-ftp.xml \
 		test/simple-player test/test-nap
-
-if HIDD
-bin_PROGRAMS += compat/hidd
-
-compat_hidd_SOURCES = compat/hidd.c compat/hidd.h src/uinput.h \
-				compat/sdp.h compat/sdp.c compat/fakehid.c \
-						src/textfile.h src/textfile.c
-compat_hidd_LDADD = -lm lib/libbluetooth-private.la
-
-dist_man_MANS += compat/hidd.1
-else
-EXTRA_DIST += compat/hidd.1
-endif
-
-if PAND
-bin_PROGRAMS += compat/pand
-
-compat_pand_SOURCES = compat/pand.c compat/pand.h \
-				compat/bnep.c compat/sdp.h compat/sdp.c \
-						src/textfile.h src/textfile.c
-compat_pand_LDADD = lib/libbluetooth-private.la
-
-dist_man_MANS += compat/pand.1
-else
-EXTRA_DIST += compat/pand.1
-endif
-
-if DUND
-bin_PROGRAMS += compat/dund
-
-compat_dund_SOURCES = compat/dund.c compat/dund.h compat/lib.h \
-			compat/sdp.h compat/sdp.c compat/dun.c compat/msdun.c \
-						src/textfile.h src/textfile.c
-compat_dund_LDADD = lib/libbluetooth-private.la
-
-dist_man_MANS += compat/dund.1
-else
-EXTRA_DIST += compat/dund.1
-endif

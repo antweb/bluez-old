@@ -2,8 +2,8 @@
  *
  *  BlueZ - Bluetooth protocol stack for Linux
  *
- *  Copyright (C) 2002-2003  Maxim Krasnyansky <maxk@qualcomm.com>
- *  Copyright (C) 2002-2010  Marcel Holtmann <marcel@holtmann.org>
+ *  Copyright (C) 2012  Nokia Corporation
+ *  Copyright (C) 2012  Marcel Holtmann <marcel@holtmann.org>
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -22,15 +22,5 @@
  *
  */
 
-int bnep_init(void);
-int bnep_cleanup(void);
-
-int bnep_str2svc(char *svc, uint16_t *uuid);
-char *bnep_svc2str(uint16_t uuid);
-
-int bnep_show_connections(void);
-int bnep_kill_connection(uint8_t *dst);
-int bnep_kill_all_connections(void);
-
-int bnep_accept_connection(int sk, uint16_t role, char *dev);
-int bnep_create_connection(int sk, uint16_t role, uint16_t svc, char *dev);
+int time_manager_init(void);
+void time_manager_exit(void);

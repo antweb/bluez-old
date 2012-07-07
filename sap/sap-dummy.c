@@ -43,6 +43,7 @@ enum {
 };
 
 static DBusConnection *connection = NULL;
+static unsigned int init_cnt = 0;
 
 static int sim_card_conn_status = SIM_DISCONNECTED;
 static void *sap_data = NULL; /* SAP server private data. */
@@ -54,34 +55,30 @@ void sap_connect_req(void *sap_device, uint16_t maxmsgsize)
 	DBG("status: %d", sim_card_conn_status);
 
 	if (sim_card_conn_status != SIM_DISCONNECTED) {
-		sap_connect_rsp(sap_device, SAP_STATUS_CONNECTION_FAILED,
-								maxmsgsize);
+		sap_connect_rsp(sap_device, SAP_STATUS_CONNECTION_FAILED);
 		return;
 	}
 
 	if (max_msg_size_supported > maxmsgsize) {
-		sap_connect_rsp(sap_device, SAP_STATUS_MAX_MSG_SIZE_TOO_SMALL,
-						max_msg_size_supported);
+		sap_connect_rsp(sap_device, SAP_STATUS_MAX_MSG_SIZE_TOO_SMALL);
 		return;
 	}
 
 	if (max_msg_size_supported < maxmsgsize) {
 		sap_connect_rsp(sap_device,
-				SAP_STATUS_MAX_MSG_SIZE_NOT_SUPPORTED,
-				max_msg_size_supported);
+					SAP_STATUS_MAX_MSG_SIZE_NOT_SUPPORTED);
 		return;
 	}
 
 	if (ongoing_call_status) {
-		sap_connect_rsp(sap_device, SAP_STATUS_OK_ONGOING_CALL,
-						max_msg_size_supported);
+		sap_connect_rsp(sap_device, SAP_STATUS_OK_ONGOING_CALL);
 		return;
 	}
 
 	sim_card_conn_status = SIM_CONNECTED;
 	sap_data = sap_device;
 
-	sap_connect_rsp(sap_device, SAP_STATUS_OK, maxmsgsize);
+	sap_connect_rsp(sap_device, SAP_STATUS_OK);
 	sap_status_ind(sap_device, SAP_STATUS_CHANGE_CARD_RESET);
 }
 
@@ -105,18 +102,24 @@ void sap_transfer_apdu_req(void *sap_device, struct sap_parameter *param)
 
 	DBG("status: %d", sim_card_conn_status);
 
-	if (sim_card_conn_status == SIM_MISSING)
+	switch (sim_card_conn_status) {
+	case SIM_MISSING:
 		sap_transfer_apdu_rsp(sap_device,
 				SAP_RESULT_ERROR_CARD_REMOVED, NULL, 0);
-	else if (sim_card_conn_status == SIM_POWERED_OFF)
+		break;
+	case SIM_POWERED_OFF:
 		sap_transfer_apdu_rsp(sap_device, SAP_RESULT_ERROR_POWERED_OFF,
 								NULL, 0);
-	else if (sim_card_conn_status != SIM_CONNECTED)
+		break;
+	case SIM_DISCONNECTED:
 		sap_transfer_apdu_rsp(sap_device,
-			SAP_RESULT_ERROR_NOT_ACCESSIBLE, NULL, 0);
-	else
+				SAP_RESULT_ERROR_NOT_ACCESSIBLE, NULL, 0);
+		break;
+	case SIM_CONNECTED:
 		sap_transfer_apdu_rsp(sap_device, SAP_RESULT_OK,
-						(uint8_t *)&apdu, sizeof(apdu));
+						(uint8_t *)apdu, sizeof(apdu));
+		break;
+	}
 }
 
 void sap_transfer_atr_req(void *sap_device)
@@ -125,36 +128,46 @@ void sap_transfer_atr_req(void *sap_device)
 
 	DBG("status: %d", sim_card_conn_status);
 
-	if (sim_card_conn_status == SIM_MISSING)
+	switch (sim_card_conn_status) {
+	case SIM_MISSING:
 		sap_transfer_atr_rsp(sap_device, SAP_RESULT_ERROR_CARD_REMOVED,
 								NULL, 0);
-	else if (sim_card_conn_status == SIM_POWERED_OFF)
+		break;
+	case SIM_POWERED_OFF:
 		sap_transfer_atr_rsp(sap_device, SAP_RESULT_ERROR_POWERED_OFF,
 								NULL, 0);
-	else if (sim_card_conn_status != SIM_CONNECTED)
+		break;
+	case SIM_DISCONNECTED:
 		sap_transfer_atr_rsp(sap_device, SAP_RESULT_ERROR_NO_REASON,
 								NULL, 0);
-	else
+		break;
+	case SIM_CONNECTED:
 		sap_transfer_atr_rsp(sap_device, SAP_RESULT_OK,
-						(uint8_t *)&atr, sizeof(atr));
+						(uint8_t *)atr, sizeof(atr));
+		break;
+	}
 }
 
 void sap_power_sim_off_req(void *sap_device)
 {
 	DBG("status: %d", sim_card_conn_status);
 
-	if (sim_card_conn_status == SIM_MISSING) {
+	switch (sim_card_conn_status) {
+	case SIM_MISSING:
 		sap_power_sim_off_rsp(sap_device,
 					SAP_RESULT_ERROR_CARD_REMOVED);
-	} else if (sim_card_conn_status == SIM_POWERED_OFF) {
+		break;
+	case SIM_POWERED_OFF:
 		sap_power_sim_off_rsp(sap_device,
 					SAP_RESULT_ERROR_POWERED_OFF);
-	} else if (sim_card_conn_status != SIM_CONNECTED) {
-		sap_power_sim_off_rsp(sap_device,
-					SAP_RESULT_ERROR_NO_REASON);
-	} else {
+		break;
+	case SIM_DISCONNECTED:
+		sap_power_sim_off_rsp(sap_device, SAP_RESULT_ERROR_NO_REASON);
+		break;
+	case SIM_CONNECTED:
 		sap_power_sim_off_rsp(sap_device, SAP_RESULT_OK);
 		sim_card_conn_status = SIM_POWERED_OFF;
+		break;
 	}
 }
 
@@ -162,19 +175,22 @@ void sap_power_sim_on_req(void *sap_device)
 {
 	DBG("status: %d", sim_card_conn_status);
 
-	if (sim_card_conn_status == SIM_MISSING) {
+	switch (sim_card_conn_status) {
+	case SIM_MISSING:
 		sap_power_sim_on_rsp(sap_device,
 					SAP_RESULT_ERROR_CARD_REMOVED);
-	} else if (sim_card_conn_status == SIM_POWERED_OFF) {
+		break;
+	case SIM_POWERED_OFF:
 		sap_power_sim_on_rsp(sap_device, SAP_RESULT_OK);
 		sim_card_conn_status = SIM_CONNECTED;
-		return;
-	} else if (sim_card_conn_status != SIM_CONNECTED) {
+		break;
+	case SIM_DISCONNECTED:
 		sap_power_sim_on_rsp(sap_device,
 					SAP_RESULT_ERROR_NOT_ACCESSIBLE);
-	} else {
-		sap_power_sim_on_rsp(sap_device,
-					SAP_RESULT_ERROR_NO_REASON);
+		break;
+	case SIM_CONNECTED:
+		sap_power_sim_on_rsp(sap_device, SAP_RESULT_ERROR_NO_REASON);
+		break;
 	}
 }
 
@@ -182,14 +198,19 @@ void sap_reset_sim_req(void *sap_device)
 {
 	DBG("status: %d", sim_card_conn_status);
 
-	if (sim_card_conn_status == SIM_MISSING) {
+	switch (sim_card_conn_status) {
+	case SIM_MISSING:
 		sap_reset_sim_rsp(sap_device, SAP_RESULT_ERROR_CARD_REMOVED);
-	} else if (sim_card_conn_status == SIM_POWERED_OFF) {
+		break;
+	case SIM_POWERED_OFF:
 		sap_reset_sim_rsp(sap_device, SAP_RESULT_ERROR_POWERED_OFF);
-	} else if (sim_card_conn_status != SIM_CONNECTED) {
+		break;
+	case SIM_DISCONNECTED:
 		sap_reset_sim_rsp(sap_device, SAP_RESULT_ERROR_NO_REASON);
-	} else {
+		break;
+	case SIM_CONNECTED:
 		sap_reset_sim_rsp(sap_device, SAP_RESULT_OK);
+		break;
 	}
 }
 
@@ -335,6 +356,9 @@ static const GDBusMethodTable dummy_methods[] = {
 
 int sap_init(void)
 {
+	if (init_cnt++)
+		return 0;
+
 	connection = dbus_bus_get(DBUS_BUS_SYSTEM, NULL);
 
 	if (g_dbus_register_interface(connection, SAP_DUMMY_PATH,
@@ -342,8 +366,11 @@ int sap_init(void)
 				NULL, NULL) == FALSE) {
 		error("sap-dummy interface %s init failed on path %s",
 					SAP_DUMMY_IFACE, SAP_DUMMY_PATH);
-		dbus_connection_unref(connection);
-		connection = NULL;
+
+		if (init_cnt--) {
+			dbus_connection_unref(connection);
+			connection = NULL;
+		}
 		return -1;
 	}
 
@@ -352,6 +379,9 @@ int sap_init(void)
 
 void sap_exit(void)
 {
+	if (--init_cnt)
+		return;
+
 	g_dbus_unregister_interface(connection, SAP_DUMMY_PATH,
 							SAP_DUMMY_IFACE);
 

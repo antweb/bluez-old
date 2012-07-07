@@ -653,22 +653,18 @@ static int hidp_add_connection(const struct input_device *idev,
 
 	/* Encryption is mandatory for keyboards */
 	if (req->subclass & 0x40) {
-		struct btd_adapter *adapter = device_get_adapter(idev->device);
-
-		err = btd_adapter_encrypt_link(adapter, (bdaddr_t *) &idev->dst,
-						encrypt_completed, req);
-		if (err == 0) {
-			/* Waiting async encryption */
-			return 0;
-		}
-
-		if (err == -ENOSYS)
-			goto nosys;
-
-		if (err != -EALREADY) {
-			error("encrypt_link: %s (%d)", strerror(-err), -err);
+		if (!bt_io_set(iconn->intr_io, BT_IO_L2CAP, &gerr,
+					BT_IO_OPT_SEC_LEVEL, BT_IO_SEC_MEDIUM,
+					BT_IO_OPT_INVALID)) {
+			error("btio: %s", gerr->message);
+			g_error_free(gerr);
+			err = -EFAULT;
 			goto cleanup;
 		}
+
+		iconn->req = req;
+		iconn->sec_watch = g_io_add_watch(iconn->intr_io, G_IO_OUT,
+							encrypt_notify, iconn);
 	}
 
 	err = ioctl_connadd(req);
@@ -678,20 +674,6 @@ cleanup:
 	g_free(req);
 
 	return err;
-
-nosys:
-	if (!bt_io_set(iconn->intr_io, BT_IO_L2CAP, &gerr,
-				BT_IO_OPT_SEC_LEVEL, BT_IO_SEC_MEDIUM,
-				BT_IO_OPT_INVALID)) {
-		error("btio: %s", gerr->message);
-		g_error_free(gerr);
-		goto cleanup;
-	}
-
-	iconn->req = req;
-	iconn->sec_watch = g_io_add_watch(iconn->intr_io, G_IO_OUT,
-							encrypt_notify, iconn);
-	return 0;
 }
 
 static int is_connected(struct input_conn *iconn)
@@ -1096,10 +1078,11 @@ static struct input_device *input_device_new(DBusConnection *conn,
 	struct btd_adapter *adapter = device_get_adapter(device);
 	struct input_device *idev;
 	char name[249], src_addr[18], dst_addr[18];
+	uint8_t dst_type;
 
 	idev = g_new0(struct input_device, 1);
 	adapter_get_address(adapter, &idev->src);
-	device_get_address(device, &idev->dst, NULL);
+	device_get_address(device, &idev->dst, &dst_type);
 	idev->device = btd_device_ref(device);
 	idev->path = g_strdup(path);
 	idev->conn = dbus_connection_ref(conn);
@@ -1108,7 +1091,8 @@ static struct input_device *input_device_new(DBusConnection *conn,
 
 	ba2str(&idev->src, src_addr);
 	ba2str(&idev->dst, dst_addr);
-	if (read_device_name(src_addr, dst_addr, name) == 0)
+
+	if (read_device_name(src_addr, dst_addr, dst_type, name) == 0)
 		idev->name = g_strdup(name);
 
 	if (g_dbus_register_interface(conn, idev->path, INPUT_DEVICE_INTERFACE,

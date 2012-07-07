@@ -54,7 +54,6 @@
 #include "../src/device.h"
 
 #include "log.h"
-#include "ipc.h"
 #include "device.h"
 #include "error.h"
 #include "avdtp.h"
@@ -69,7 +68,6 @@
 #include "manager.h"
 #include "sdpd.h"
 #include "telephony.h"
-#include "unix.h"
 
 typedef enum {
 	HEADSET	= 1 << 0,
@@ -114,7 +112,6 @@ static struct enabled_interfaces enabled = {
 	.sink		= TRUE,
 	.source		= FALSE,
 	.control	= TRUE,
-	.socket		= FALSE,
 	.media		= TRUE,
 };
 
@@ -1183,8 +1180,6 @@ int audio_manager_init(DBusConnection *conn, GKeyFile *conf,
 			enabled.source = TRUE;
 		else if (g_str_equal(list[i], "Control"))
 			enabled.control = TRUE;
-		else if (g_str_equal(list[i], "Socket"))
-			enabled.socket = TRUE;
 		else if (g_str_equal(list[i], "Media"))
 			enabled.media = TRUE;
 
@@ -1204,8 +1199,6 @@ int audio_manager_init(DBusConnection *conn, GKeyFile *conf,
 			enabled.source = FALSE;
 		else if (g_str_equal(list[i], "Control"))
 			enabled.control = FALSE;
-		else if (g_str_equal(list[i], "Socket"))
-			enabled.socket = FALSE;
 		else if (g_str_equal(list[i], "Media"))
 			enabled.media = FALSE;
 	}
@@ -1235,8 +1228,8 @@ int audio_manager_init(DBusConnection *conn, GKeyFile *conf,
 		max_connected_headsets = i;
 
 proceed:
-	if (enabled.socket)
-		unix_init();
+	if (enabled.control)
+		btd_register_adapter_driver(&avrcp_server_driver);
 
 	if (enabled.media)
 		btd_register_adapter_driver(&media_server_driver);
@@ -1249,9 +1242,6 @@ proceed:
 
 	if (enabled.source || enabled.sink)
 		btd_register_adapter_driver(&a2dp_server_driver);
-
-	if (enabled.control)
-		btd_register_adapter_driver(&avrcp_server_driver);
 
 	btd_register_device_driver(&audio_driver);
 
@@ -1273,9 +1263,6 @@ void audio_manager_exit(void)
 		g_key_file_free(config);
 		config = NULL;
 	}
-
-	if (enabled.socket)
-		unix_exit();
 
 	if (enabled.media)
 		btd_unregister_adapter_driver(&media_server_driver);

@@ -43,7 +43,6 @@
 #include "avdtp.h"
 #include "sink.h"
 #include "source.h"
-#include "unix.h"
 #include "a2dp.h"
 #include "sdpd.h"
 
@@ -1240,14 +1239,11 @@ static gboolean delayreport_ind(struct avdtp *session,
 				uint8_t *err, void *user_data)
 {
 	struct a2dp_sep *a2dp_sep = user_data;
-	struct audio_device *dev = a2dp_get_dev(session);
 
 	if (a2dp_sep->type == AVDTP_SEP_TYPE_SINK)
 		DBG("Sink %p: DelayReport_Ind", sep);
 	else
 		DBG("Source %p: DelayReport_Ind", sep);
-
-	unix_delay_report(dev, rseid, delay);
 
 	return TRUE;
 }
@@ -1442,13 +1438,10 @@ static struct a2dp_server *find_server(GSList *list, const bdaddr_t *src)
 
 int a2dp_register(DBusConnection *conn, const bdaddr_t *src, GKeyFile *config)
 {
-	int sbc_srcs = 0, sbc_sinks = 0;
-	int mpeg12_srcs = 0, mpeg12_sinks = 0;
-	gboolean source = TRUE, sink = FALSE, socket = FALSE;
+	gboolean source = TRUE, sink = FALSE;
 	gboolean delay_reporting = FALSE;
 	char *str;
 	GError *err = NULL;
-	int i;
 	struct a2dp_server *server;
 
 	if (!config)
@@ -1464,8 +1457,6 @@ int a2dp_register(DBusConnection *conn, const bdaddr_t *src, GKeyFile *config)
 			source = TRUE;
 		if (strstr(str, "Source"))
 			sink = TRUE;
-		if (strstr(str, "Socket"))
-			socket = TRUE;
 		g_free(str);
 	}
 
@@ -1479,50 +1470,6 @@ int a2dp_register(DBusConnection *conn, const bdaddr_t *src, GKeyFile *config)
 			source = FALSE;
 		if (strstr(str, "Source"))
 			sink = FALSE;
-		if (strstr(str, "Socket"))
-			socket = FALSE;
-		g_free(str);
-	}
-
-	/* Don't register any local sep if Socket is disabled */
-	if (socket == FALSE)
-		goto proceed;
-
-	str = g_key_file_get_string(config, "A2DP", "SBCSources", &err);
-	if (err) {
-		DBG("audio.conf: %s", err->message);
-		g_clear_error(&err);
-		sbc_srcs = 1;
-	} else {
-		sbc_srcs = atoi(str);
-		g_free(str);
-	}
-
-	str = g_key_file_get_string(config, "A2DP", "MPEG12Sources", &err);
-	if (err) {
-		DBG("audio.conf: %s", err->message);
-		g_clear_error(&err);
-	} else {
-		mpeg12_srcs = atoi(str);
-		g_free(str);
-	}
-
-	str = g_key_file_get_string(config, "A2DP", "SBCSinks", &err);
-	if (err) {
-		DBG("audio.conf: %s", err->message);
-		g_clear_error(&err);
-		sbc_sinks = 1;
-	} else {
-		sbc_sinks = atoi(str);
-		g_free(str);
-	}
-
-	str = g_key_file_get_string(config, "A2DP", "MPEG12Sinks", &err);
-	if (err) {
-		DBG("audio.conf: %s", err->message);
-		g_clear_error(&err);
-	} else {
-		mpeg12_sinks = atoi(str);
 		g_free(str);
 	}
 
@@ -1556,29 +1503,8 @@ proceed:
 		server->version = 0x0102;
 
 	server->source_enabled = source;
-	if (source) {
-		for (i = 0; i < sbc_srcs; i++)
-			a2dp_add_sep(src, AVDTP_SEP_TYPE_SOURCE,
-					A2DP_CODEC_SBC, delay_reporting,
-					NULL, NULL, NULL, NULL);
 
-		for (i = 0; i < mpeg12_srcs; i++)
-			a2dp_add_sep(src, AVDTP_SEP_TYPE_SOURCE,
-					A2DP_CODEC_MPEG12, delay_reporting,
-					NULL, NULL, NULL, NULL);
-	}
 	server->sink_enabled = sink;
-	if (sink) {
-		for (i = 0; i < sbc_sinks; i++)
-			a2dp_add_sep(src, AVDTP_SEP_TYPE_SINK,
-					A2DP_CODEC_SBC, delay_reporting,
-					NULL, NULL, NULL, NULL);
-
-		for (i = 0; i < mpeg12_sinks; i++)
-			a2dp_add_sep(src, AVDTP_SEP_TYPE_SINK,
-					A2DP_CODEC_MPEG12, delay_reporting,
-					NULL, NULL, NULL, NULL);
-	}
 
 	return 0;
 }
