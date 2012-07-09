@@ -459,6 +459,13 @@ static void process() {
 
 	gettimeofday(&last, NULL);
 	do {
+		if(dumpseq.current->attr->action == HCISEQ_ACTION_SKIP) {
+			printf("[%d/%d] Skipping\n", pos, dumpseq.len);
+			dumpseq.current = dumpseq.current->next;
+			pos++;
+			continue;
+		}
+
 		/* delay */
 		if(timing == TIMING_DELTA) {
 			/* consider exec time of process_out()/process_in() */

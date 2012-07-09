@@ -146,6 +146,11 @@ static int apply_attr(struct scope_node *scope_node, struct attr_list *list) {
 				if(verbose) {
 					printf("\t[%d] set action to 'emulate'\n", scope_node->pos);
 				}
+			} else if(strcmp(attr_node->val, "skip") == 0) {
+				lval = HCISEQ_ACTION_SKIP;
+				if(verbose) {
+					printf("\t[%d] set action to 'skip'\n", scope_node->pos);
+				}
 			} else {
 				return 1;
 			}
