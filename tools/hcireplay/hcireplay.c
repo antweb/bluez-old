@@ -43,6 +43,7 @@ int timeout = -1;
 int skipped = 0;
 int timing = TIMING_NONE;
 double factor = 1;
+bool verbose = false;
 
 struct btdev *btdev;
 
@@ -542,8 +543,9 @@ static void usage(void)
 		"\t-m, --factor=<value>         Use timing modifier\n"
 		"\t-t, --timeout=<value>        Use timeout when receiving\n"
 		"\t-c, --config=<file>          Use config file\n"
-		"\t-v, --version                Give version information\n"
-		"\t-h, --help                   Give a short usage message\n");
+		"\t-v, --verbose                Enable verbose output\n"
+		"\t    --version                Give version information\n"
+		"\t    --help                   Give a short usage message\n");
 }
 
 static const struct option main_options[] = {
@@ -551,8 +553,9 @@ static const struct option main_options[] = {
 	{ "factor",	required_argument,		NULL, 'm'	},
 	{ "timeout",	required_argument,	NULL, 't'	},
 	{ "config",	required_argument,	    NULL, 'c'	},
-	{ "version",	no_argument,		NULL, 'v'	},
-	{ "help",	no_argument,			NULL, 'h'	},
+	{ "verbose",    no_argument,        NULL, 'v'	},
+	{ "version",    no_argument,        NULL, 'V'	},
+	{ "help",       no_argument,        NULL, 'H'	},
 	{ }
 };
 
@@ -567,7 +570,7 @@ int main(int argc, char *argv[])
 	while(1) {
 		int opt;
 
-		opt = getopt_long(argc, argv, "d:m:t:c:vh", main_options, NULL);
+		opt = getopt_long(argc, argv, "d:m:t:c:v", main_options, NULL);
 		if (opt < 0)
 			break;
 
@@ -589,9 +592,12 @@ int main(int argc, char *argv[])
 			config = optarg;
 			break;
 		case 'v':
+			verbose = true;
+			break;
+		case 'V':
 			printf("%s\n", VERSION);
 			return EXIT_SUCCESS;
-		case 'h':
+		case 'H':
 			usage();
 			return EXIT_SUCCESS;
 		default:
@@ -627,7 +633,7 @@ int main(int argc, char *argv[])
 	calc_rel_ts(&dumpseq);
 
 	if(config != NULL) {
-		if(parse_config(config, &dumpseq, &type_cfg, false)) {
+		if(parse_config(config, &dumpseq, &type_cfg, verbose)) {
 			vhci_close();
 			return 1;
 		}
