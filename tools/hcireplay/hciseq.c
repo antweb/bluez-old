@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include "hciseq.h"
 #include "hcireplay.h"
+#include "monitor/bt.h"
 
 int find_by_opcode(struct hciseq_node *start, struct hciseq_node **ptr, uint16_t opcode) {
 	unsigned int pos;
@@ -11,10 +12,12 @@ int find_by_opcode(struct hciseq_node *start, struct hciseq_node **ptr, uint16_t
 	pos = 1;
 	tmp = start->next;
 	while(tmp != NULL) {
-		opcode_next = le16_to_cpu(tmp->frame->data+1);
-		if(opcode == opcode_next) {
-			*ptr = tmp;
-			return pos;
+		if(((uint8_t *) tmp->frame->data)[0] == BT_H4_CMD_PKT) {
+			opcode_next = le16_to_cpu(*((uint16_t*) (tmp->frame->data+1)));
+			if(opcode == opcode_next) {
+				*ptr = tmp;
+				return pos;
+			}
 		}
 		tmp = tmp->next;
 		pos++;
