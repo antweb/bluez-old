@@ -1,6 +1,8 @@
 #ifndef HCIREPLAY_H
 #define HCIREPLAY_H
 
+#include "hciseq.h"
+
 struct hcidump_hdr {
 	uint16_t	len;
 	uint8_t		in;
@@ -74,7 +76,7 @@ struct frame {
 };
 
 struct hciseq_type_cfg {
-	struct hciseq_attr *cmd[8223];
+	struct hciseq_attr *cmd[12288];
 	struct hciseq_attr *evt[256];
 	struct hciseq_attr *acl;
 };
