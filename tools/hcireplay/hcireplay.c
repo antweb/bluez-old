@@ -25,6 +25,8 @@
 #include "emulator/btdev.h"
 #include "../../config.h"
 
+#define MAXMSG 128
+
 #define TIMING_NONE 0
 #define TIMING_DELTA 1
 
@@ -292,6 +294,27 @@ static int parse_dump(int fd, struct hciseq *seq, unsigned long flags)
 	return 0;
 }
 
+static void dump_frame(struct frame *frm) {
+	uint8_t pkt_type = ((const uint8_t *) frm->data)[0];
+	switch (pkt_type) {
+	case BT_H4_CMD_PKT:
+		packet_hci_command(&start, 0x00, frm->data + 1, frm->len);
+		break;
+	case BT_H4_EVT_PKT:
+		packet_hci_event(&start, 0x00, frm->data + 1, frm->len);
+		break;
+	case BT_H4_ACL_PKT:
+		if(frm->in)
+			packet_hci_acldata(&start, 0x00, 0x01, frm->data + 1, frm->len);
+		else
+			packet_hci_acldata(&start, 0x00, 0x00, frm->data + 1, frm->len);
+		break;
+	default:
+		//TODO: hex dump
+		break;
+	}
+}
+
 static int send_frm(struct frame *frm) {
 	int n;
 
@@ -333,69 +356,107 @@ void btdev_send (const void *data, uint16_t len, void *user_data) {
 	frm.data = data;
 	frm.len = len;
 	frm.data_len = len;
-	printf("> (emulated)\n", pos, dumpseq.len);
+	frm.in = 1;
+	printf("[Emulator ] ");
+	dump_frame(&frm);
 	send_frm(&frm);
 }
 
 void btdev_recv(struct frame *frm) {
-	printf("< [%d/%d] (emulated)\n", pos, dumpseq.len);
+	frm->in = 0;
+	printf("[Emulator ] ");
+	dump_frame(frm);
 	btdev_receive_h4(btdev, frm->data, frm->len);
 }
 
-static int replay_cmd(const void *data, int len) {
-	struct frame frm_in;
-	struct frame *frm_cur = dumpseq.current->frame;
-	struct frame *frm_next = dumpseq.current->next->frame;
-	const struct bt_hci_cmd_hdr *hdr_in = data+1;
-	const struct bt_hci_cmd_hdr *hdr_cur = frm_cur->data+1;
-	uint16_t opcode_in;
-	uint16_t opcode_cur;
-	struct hciseq_node *frm_ptr;
-	int npos;
+static struct hciseq_attr* get_type_attr(struct frame *frm) {
+	uint8_t pkt_type = ((const uint8_t *) frm->data)[0];
+	uint16_t opcode;
+	uint8_t evt;
 
-	opcode_in = le16_to_cpu(hdr_in->opcode);
-	opcode_cur = le16_to_cpu(hdr_cur->opcode);
+	switch (pkt_type) {
+	case BT_H4_CMD_PKT:
+		opcode = *((uint16_t*) (frm->data+1));
+		if(opcode > 0x2FFF)
+			return NULL;
+		return type_cfg.cmd[opcode];
+	case BT_H4_EVT_PKT:
+		evt = *((uint8_t*)(frm->data+1));
 
-	if(opcode_in == opcode_cur) {
-		//TODO: check rest of frame
-		printf("[%d/%d] ", pos, dumpseq.len);
-		packet_hci_command(&start, 0x00, data + 1, len);
-		return 0;
-	} else {
-		printf("[W]  < unexpected opcode - waiting for (0x%2.2x|0x%4.4x), was (0x%2.2x|0x%4.4x) \n", cmd_opcode_ogf(opcode_cur), cmd_opcode_ocf(opcode_cur), cmd_opcode_ogf(opcode_in), cmd_opcode_ocf(opcode_in));
-
-		if((npos = find_by_opcode(dumpseq.current, &frm_ptr, opcode_in)) > 0) {
-			printf("[I]  Found matching packet at position %d\n", pos);
+		/* use attributes of opcode for 'Command Complete' events */
+		if(evt == 0x0e) {
+			opcode = *((uint16_t*) (frm->data+4));
+			return type_cfg.cmd[opcode];
 		}
-		return 1;
+
+		return type_cfg.evt[evt];
+	case BT_H4_ACL_PKT:
+		return type_cfg.acl;
+	default:
+		return NULL;
 	}
 }
 
-static int replay_evt() {
-	printf("[%d/%d] ", pos, dumpseq.len);
-	packet_hci_event(&start, 0x00, dumpseq.current->frame->data + 1, dumpseq.current->frame->len);
-	send_frm(dumpseq.current->frame);
-	return 0;
+
+static bool check_match(struct frame *l, struct frame *r, char *msg) {
+	uint8_t type_l = ((const uint8_t *) l->data)[0];
+	uint8_t type_r = ((const uint8_t *) l->data)[0];
+	uint16_t opcode_l, opcode_r;
+	uint8_t evt_l, evt_r;
+
+	if(type_l != type_r) {
+		snprintf(msg, MAXMSG, "! Wrong packet type - expected (0x%2.2x), was (0x%2.2x)", type_l, type_r);
+		return false;
+	}
+
+	switch (type_l) {
+	case BT_H4_CMD_PKT:
+		opcode_l = *((uint16_t*) (l->data+1));
+		opcode_r = *((uint16_t*) (r->data+1));
+		if(opcode_l != opcode_r) {
+			snprintf(msg, MAXMSG, "! Wrong opcode - expected (0x%2.2x|0x%4.4x), was (0x%2.2x|0x%4.4x)", cmd_opcode_ogf(opcode_l), cmd_opcode_ocf(opcode_l), cmd_opcode_ogf(opcode_r), cmd_opcode_ocf(opcode_r));
+			return false;
+		} else {
+			return true;
+		}
+	case BT_H4_EVT_PKT:
+		evt_l = *((uint8_t*)(l->data+1));
+		evt_r = *((uint8_t*)(r->data+1));
+		if(evt_l != evt_r) {
+			snprintf(msg, MAXMSG, "! Wrong event type - expected (0x%2.2x), was (0x%2.2x)", evt_l, evt_r);
+			return false;
+		} else {
+			return true;
+		}
+	case BT_H4_ACL_PKT:
+		if(l->len != r->len)
+			return false;
+
+		if(!memcmp(l->data, r->data, l->len))
+			return true;
+		else
+			return false;
+	default:
+		snprintf(msg, MAXMSG, "! Unknown packet type (0x%2.2x)", type_l);
+
+		if(l->len != r->len)
+			return false;
+
+		if(!memcmp(l->data, r->data, l->len))
+			return true;
+		else
+			return false;
+	}
 }
 
-static int replay_acl_in(const void *data, int len) {
-	printf("[%d/%d] ", pos, dumpseq.len);
-	packet_hci_acldata(&start, 0x00, 0x01, data, len);
-	return 0;
-}
-
-static int replay_acl_out() {
-	printf("[%d/%d] ", pos, dumpseq.len);
-	packet_hci_acldata(&start, 0x00, 0x00, dumpseq.current->frame->data + 1, dumpseq.current->frame->len);
-	send_frm(dumpseq.current->frame);
-	return 0;
-}
-
-static void process_in() {
+static int process_in() {
 	static struct frame frm;
 	static uint8_t data[HCI_MAX_FRAME_SIZE];
 	uint8_t pkt_type;
 	int n;
+	struct hciseq_attr *attr;
+	bool match;
+	char msg[MAXMSG];
 
 	frm.data = &data;
 	frm.ptr = frm.data;
@@ -403,65 +464,116 @@ static void process_in() {
 	n = recv_frm(fd, &frm);
 	if(n < 0) {
 		printf("Could not receive\n");
-		return;
+		return 0;
 	} else if(n == 0){
-		printf("  [%d/%d] Timeout\n", pos, dumpseq.len);
+		printf("[%4d/%4d] Timeout\n", pos, dumpseq.len);
 		skipped++;
-		return;
+		return 1;
 	}
 
-	if(dumpseq.current->attr->action == HCISEQ_ACTION_EMULATE) {
-		btdev_recv(&frm);
-		return;
-	}
+	/* is this the packet in the sequence? */
+	msg[0] = '\0';
+	match = check_match(dumpseq.current->frame, &frm, msg);
 
-	pkt_type = ((const uint8_t *) data)[0];
-	switch (pkt_type) {
-	case BT_H4_CMD_PKT:
-		if(replay_cmd(data, frm.len)) {
-			/* try again after unexpected packet */
-			process_in();
+	/* check type config */
+	attr = get_type_attr(&frm);
+	if(attr != NULL) {
+		if(attr->action == HCISEQ_ACTION_SKIP) {
+			if(match) {
+				printf("[%4d/%4d] SKIPPING\n", pos, dumpseq.len);
+				return 1;
+			} else {
+				printf("[ Unknown ] %s\n            ", msg);
+				dump_frame(&frm);
+				printf("            SKIPPING\n");
+				return 0;
+			}
 		}
-		break;
-	case BT_H4_ACL_PKT:
-		replay_acl_in(data, frm.len);
-		break;
-	default:
-		printf("Unsupported packet 0x%2.2x\n", pkt_type);
-		break;
+		if(attr->action == HCISEQ_ACTION_EMULATE) {
+			if(match) {
+				printf("[%4d/%4d] EMULATING\n", pos, dumpseq.len);
+			} else {
+				printf("[ Unknown ] %s\n            ", msg);
+				printf("EMULATING\n");
+			}
+
+			btdev_recv(&frm);
+
+			if(match)
+				return 1;
+			else
+				return 0;
+		}
+	}
+
+	/* process packet if match */
+	if(match) {
+		printf("[%4d/%4d] ", pos, dumpseq.len);
+
+		if(dumpseq.current->attr->action == HCISEQ_ACTION_EMULATE) {
+			btdev_recv(&frm);
+			return 1;
+		}
+
+		dump_frame(&frm);
+		return 1;
+	} else {
+		printf("[ Unknown ] %s\n            ", msg);
+		dump_frame(&frm);
+		return 0;
 	}
 }
 
-static void process_out() {
+static int process_out() {
 	uint8_t pkt_type;
+	struct hciseq_attr *attr;
 
+	/* emulator sends response automatically */
 	if(dumpseq.current->attr->action == HCISEQ_ACTION_EMULATE) {
-		return;
+		return 1;
+	}
+
+	/* use type config if set */
+	attr = get_type_attr(dumpseq.current->frame);
+	if(attr != NULL) {
+		if(attr->action == HCISEQ_ACTION_SKIP) {
+			return 1;
+		}
+		if(attr->action == HCISEQ_ACTION_EMULATE) {
+			return 1;
+		}
 	}
 
 	pkt_type = ((const uint8_t *) dumpseq.current->frame->data)[0];
 
 	switch (pkt_type) {
 	case BT_H4_EVT_PKT:
-		replay_evt();
+		printf("[%4d/%4d] ", pos, dumpseq.len);
+		dump_frame(dumpseq.current->frame);
+		send_frm(dumpseq.current->frame);
 		break;
 	case BT_H4_ACL_PKT:
-		replay_acl_out();
+		printf("[%4d/%4d] ", pos, dumpseq.len);
+		dump_frame(dumpseq.current->frame);
+		send_frm(dumpseq.current->frame);
 		break;
 	default:
 		printf("Unsupported packet 0x%2.2x\n", pkt_type);
 		break;
 	}
+	return 1;
 }
 
 static void process() {
 	__useconds_t delay;
 	struct timeval last;
+	int processed;
 
 	gettimeofday(&last, NULL);
 	do {
 		if(dumpseq.current->attr->action == HCISEQ_ACTION_SKIP) {
-			printf("[%d/%d] Skipping\n", pos, dumpseq.len);
+			printf("[%4d/%4d] SKIPPING\n            ", pos, dumpseq.len);
+			dump_frame(dumpseq.current->frame);
 			dumpseq.current = dumpseq.current->next;
 			pos++;
 			continue;
@@ -475,23 +587,25 @@ static void process() {
 				delay = timeval_diff(&dumpseq.current->attr->ts_diff, &last, NULL);
 				delay *= factor;
 				if(usleep(delay) == -1) {
-					printf("[E] Delay failed\n");
+					printf("Delay failed\n");
 				}
 			} else {
 				/* exec time was longer than delay */
-				printf("[W] Packet delay\n");
+				printf("Packet delay\n");
 			}
 			gettimeofday(&last, NULL);
 		}
 
 		if(dumpseq.current->frame->in == 1) {
-			process_out();
+			processed = process_out();
 		} else {
-			process_in();
+			processed = process_in();
 		}
 
-		dumpseq.current = dumpseq.current->next;
-		pos++;
+		if(processed) {
+			dumpseq.current = dumpseq.current->next;
+			pos++;
+		}
 	} while(dumpseq.current != NULL);
 
 	printf("Done\n");
@@ -532,6 +646,21 @@ static void delete_list() {
 		free(tmp->attr);
 		free(tmp);
 	}
+}
+
+static void delete_type_cfg() {
+	int i;
+
+	for(i = 0; i < 12288; i++) {
+		if(type_cfg.cmd[i] != NULL)
+			free(type_cfg.cmd[i]);
+	}
+	for(i = 0; i < 256; i++) {
+		if(type_cfg.evt[i])
+			free(type_cfg.evt[i]);
+	}
+	if(type_cfg.acl != NULL)
+		free(type_cfg.acl);
 }
 
 static void usage(void)
@@ -610,11 +739,6 @@ int main(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 
-	if((fd = vhci_open()) < 0) {
-		perror("Failed to open VHCI interface");
-		return 1;
-	}
-
 	flags |= DUMP_BTSNOOP;
 	flags |= DUMP_VERBOSE;
 	for(j = optind; j < argc; j++) {
@@ -632,6 +756,13 @@ int main(int argc, char *argv[])
 	dumpseq.current = dumpseq.frames;
 	calc_rel_ts(&dumpseq);
 
+	/* init type config */
+	for(i = 0; i < 12288; i++)
+		type_cfg.cmd[i] = NULL;
+	for(i = 0; i < 256; i++)
+		type_cfg.evt[i] = NULL;
+	type_cfg.acl = NULL;
+
 	if(config != NULL) {
 		if(parse_config(config, &dumpseq, &type_cfg, verbose)) {
 			vhci_close();
@@ -644,11 +775,22 @@ int main(int argc, char *argv[])
 	btdev_set_send_handler(btdev, btdev_send, NULL);
 
 	gettimeofday(&start, NULL);
-	printf("Running.\n");
+
+	/*
+	 * make sure we open the interface after parsing
+	 * through all files so we can start without delay
+	 */
+	if((fd = vhci_open()) < 0) {
+		perror("Failed to open VHCI interface");
+		return 1;
+	}
+
+	printf("Running\n");
 
 	process();
 
 	delete_list();
+	delete_type_cfg();
 	vhci_close();
 	printf("Terminating\n");
 
