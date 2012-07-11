@@ -235,7 +235,6 @@ static int parse_btsnoop(int fd, struct frame *frm, struct btsnoop_hdr *hdr) {
 	ts = ntoh64(pkt.ts) - 0x00E03AB44A676000ll;
 	frm->ts.tv_sec = (ts / 1000000ll) + 946684800ll;
 	frm->ts.tv_usec = ts % 1000000ll;
-
 	return n;
 }
 
@@ -282,12 +281,12 @@ static int parse_dump(int fd, struct hciseq *seq, unsigned long flags)
 
 		if(last == NULL) {
 			seq->frames = nodeptr;
-			nodeptr->next = NULL;
 			last = nodeptr;
 		} else {
 			last->next = nodeptr;
 			last = nodeptr;
 		}
+		nodeptr->next = NULL;
 		seq->len = ++count;
 	}
 
@@ -298,16 +297,16 @@ static void dump_frame(struct frame *frm) {
 	uint8_t pkt_type = ((const uint8_t *) frm->data)[0];
 	switch (pkt_type) {
 	case BT_H4_CMD_PKT:
-		packet_hci_command(&start, 0x00, frm->data + 1, frm->len);
+		packet_hci_command(&start, 0x00, frm->data + 1, frm->data_len - 1);
 		break;
 	case BT_H4_EVT_PKT:
-		packet_hci_event(&start, 0x00, frm->data + 1, frm->len);
+		packet_hci_event(&start, 0x00, frm->data + 1, frm->data_len - 1);
 		break;
 	case BT_H4_ACL_PKT:
 		if(frm->in)
-			packet_hci_acldata(&start, 0x00, 0x01, frm->data + 1, frm->len);
+			packet_hci_acldata(&start, 0x00, 0x01, frm->data + 1, frm->data_len - 1);
 		else
-			packet_hci_acldata(&start, 0x00, 0x00, frm->data + 1, frm->len);
+			packet_hci_acldata(&start, 0x00, 0x00, frm->data + 1, frm->data_len - 1);
 		break;
 	default:
 		//TODO: hex dump
@@ -344,7 +343,7 @@ static int recv_frm(int fd, struct frame *frm) {
 
 		if((n = read(fd, (void*)&buf, HCI_MAX_FRAME_SIZE)) > 0) {
 			memcpy(frm->data, buf, n);
-			frm->len = n;
+			frm->data_len = n;
 		}
 	}
 
@@ -366,7 +365,7 @@ void btdev_recv(struct frame *frm) {
 	frm->in = 0;
 	printf("[Emulator ] ");
 	dump_frame(frm);
-	btdev_receive_h4(btdev, frm->data, frm->len);
+	btdev_receive_h4(btdev, frm->data, frm->data_len);
 }
 
 static struct hciseq_attr* get_type_attr(struct frame *frm) {
@@ -429,20 +428,20 @@ static bool check_match(struct frame *l, struct frame *r, char *msg) {
 			return true;
 		}
 	case BT_H4_ACL_PKT:
-		if(l->len != r->len)
+		if(l->data_len != r->data_len)
 			return false;
 
-		if(!memcmp(l->data, r->data, l->len))
+		if(!memcmp(l->data, r->data, l->data_len))
 			return true;
 		else
 			return false;
 	default:
 		snprintf(msg, MAXMSG, "! Unknown packet type (0x%2.2x)", type_l);
 
-		if(l->len != r->len)
+		if(l->data_len != r->data_len)
 			return false;
 
-		if(!memcmp(l->data, r->data, l->len))
+		if(!memcmp(l->data, r->data, l->data_len))
 			return true;
 		else
 			return false;
@@ -739,6 +738,8 @@ int main(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 
+	dumpseq.current = NULL;
+	dumpseq.frames = NULL;
 	flags |= DUMP_BTSNOOP;
 	flags |= DUMP_VERBOSE;
 	for(j = optind; j < argc; j++) {
