@@ -227,8 +227,39 @@ static struct scope_list* get_scope_type(uint8_t type, void *filter1, void *filt
 	uint8_t evt, node_evt;
 	bool match;
 	int pos = 1;
+	struct hciseq_attr *attr;
 
+	if(type == BT_H4_CMD_PKT) {
+		ogf = *((uint8_t*)filter1);
+		ocf = *((uint16_t*)filter2);
+		opcode = cmd_opcode_pack(ogf, ocf);
 
+		if(opcode > 0x2FFF) {
+			attr = NULL;
+		} else {
+			attr = type_cfg->cmd[opcode];
+			if(attr == NULL) {
+				attr = (struct hciseq_attr*) malloc(sizeof(struct hciseq_attr));
+				type_cfg->cmd[opcode] = attr;
+			}
+		}
+	} else if(type == BT_H4_EVT_PKT) {
+		evt = *((uint8_t*)filter1);
+		attr = type_cfg->evt[evt];
+
+		if(attr == NULL) {
+			attr = (struct hciseq_attr*) malloc(sizeof(struct hciseq_attr));
+			type_cfg->evt[evt] = attr;
+		}
+	} else if(type == BT_H4_ACL_PKT) {
+		attr = type_cfg->acl;
+		if(attr == NULL) {
+			attr = (struct hciseq_attr*) malloc(sizeof(struct hciseq_attr));
+			type_cfg->acl = attr;
+		}
+	}
+
+	/* add matching packets in sequence */
 	while(seq_node != NULL) {
 		match = false;
 		if(((uint8_t*)seq_node->frame->data)[0] == type) {
@@ -236,12 +267,9 @@ static struct scope_list* get_scope_type(uint8_t type, void *filter1, void *filt
 				node_opcode = *((uint16_t*) (seq_node->frame->data+1));
 				node_ogf = cmd_opcode_ogf(node_opcode);
 				node_ocf = cmd_opcode_ocf(node_opcode);
-				ogf = *((uint8_t*)filter1);
-				ocf = *((uint16_t*)filter2);
 				if(node_ogf == ogf && node_ocf == ocf)
 					match = true;
 			} else if(type == BT_H4_EVT_PKT) {
-				evt = *((uint8_t*)filter1);
 				node_evt = ((uint8_t*)seq_node->frame->data)[1];
 				if(evt == node_evt)
 					match = true;
@@ -268,6 +296,22 @@ static struct scope_list* get_scope_type(uint8_t type, void *filter1, void *filt
 		}
 		seq_node = seq_node->next;
 		pos++;
+	}
+
+	/* add type config */
+	if(attr != NULL) {
+		if(list == NULL) {
+			list = (struct scope_list*) malloc(sizeof(struct scope_list));
+			scope_node = (struct scope_node*) malloc(sizeof(struct scope_node));
+			list->head = scope_node;
+		} else {
+			scope_node->next = (struct scope_node*) malloc(sizeof(struct scope_node));
+			scope_node = scope_node->next;
+		}
+
+		scope_node->attr = attr;
+		scope_node->pos = 0;
+		scope_node->next = NULL;
 	}
 
 	return list;
@@ -316,9 +360,7 @@ static int parse_line(char *buf) {
 			if(verbose)
 				printf("\tadd all HCI ACL data packets:");
 
-			if((scope_list = get_scope_type(BT_H4_ACL_PKT, NULL, NULL)) == NULL) {
-				return 1;
-			}
+			scope_list = get_scope_type(BT_H4_ACL_PKT, NULL, NULL);
 		} else if(strcmp(substr, "CMD") == 0) {
 			/* scope is HCI_CMD_
 			 * length must be exactly 19 (e.g. HCI_CMD_0x03|0x0003) */
@@ -336,9 +378,7 @@ static int parse_line(char *buf) {
 			if(verbose)
 				printf("\tadd all HCI command packets with opcode (0x%2.2x|0x%4.4x):\n", ogf, ocf);
 
-			if((scope_list = get_scope_type(BT_H4_CMD_PKT, &ogf, &ocf)) == NULL) {
-				return 1;
-			}
+			scope_list = get_scope_type(BT_H4_CMD_PKT, &ogf, &ocf);
 		} else if(strcmp(substr, "EVT") == 0) {
 			/* scope is CMD_EVT_
 			 * length must be exactly 12 (e.g. HCI_EVT_0x0e) */
@@ -352,9 +392,7 @@ static int parse_line(char *buf) {
 			if(verbose)
 				printf("\tadd all HCI event packets with event type (0x%2.2x):\n", evt);
 
-			if((scope_list = get_scope_type(BT_H4_EVT_PKT, &evt, NULL)) == NULL) {
-				return 1;
-			}
+			scope_list = get_scope_type(BT_H4_EVT_PKT, &evt, NULL);
 		}
 	} else if(scopestr[0] >= 48 || scopestr[0] <=57) {
 		/* first char is a digit */
