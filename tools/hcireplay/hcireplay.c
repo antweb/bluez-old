@@ -30,24 +30,24 @@
 #define TIMING_NONE 0
 #define TIMING_DELTA 1
 
-struct hciseq dumpseq;
-struct hciseq_type_cfg type_cfg;
+static struct hciseq dumpseq;
+static struct hciseq_type_cfg type_cfg;
 
-int fd;
-int pos = 1;
-struct timeval start;
+static int fd;
+static int pos = 1;
+static struct timeval start;
 
-int epoll_fd;
-struct epoll_event epoll_event;
+static int epoll_fd;
+static struct epoll_event epoll_event;
 #define MAX_EPOLL_EVENTS 1
 
-int timeout = -1;
-int skipped = 0;
-int timing = TIMING_NONE;
-double factor = 1;
-bool verbose = false;
+static int timeout = -1;
+static int skipped = 0;
+static int timing = TIMING_NONE;
+static double factor = 1;
+static bool verbose = false;
 
-struct btdev *btdev;
+static struct btdev *btdev;
 
 __useconds_t timeval_diff(struct timeval *l, struct timeval *r, struct timeval *diff) {
 	int tmpsec;
