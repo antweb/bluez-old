@@ -14,8 +14,8 @@
 
 #define MAXLINE 128
 
-struct hciseq *seq;
-struct hciseq_type_cfg *type_cfg;
+static struct hciseq *seq;
+static struct hciseq_type_cfg *type_cfg;
 
 static bool verbose;
 static int line;
