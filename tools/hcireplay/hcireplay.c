@@ -280,8 +280,11 @@ static int parse_dump(int fd, struct hciseq *seq, unsigned long flags)
 		else
 			n = parse_hcidump(fd, frm);
 
-		if (n <= 0)
+		if (n <= 0) {
+			free(frm->data);
+			free(frm);
 			return n;
+		}
 
 		frm->ptr = frm->data;
 		frm->len = frm->data_len;
@@ -843,6 +846,7 @@ int main(int argc, char *argv[])
 
 	delete_list();
 	delete_type_cfg();
+	btdev_destroy(btdev);
 	vhci_close();
 	printf("Terminating\n");
 
