@@ -485,6 +485,7 @@ int parse_config(char *path, struct hciseq *_seq,
 	}
 
 	printf("Done\n\n");
+	fclose(file);
 	free(buf);
 	return 0;
 }
