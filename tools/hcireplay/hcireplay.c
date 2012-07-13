@@ -704,15 +704,12 @@ static void delete_type_cfg()
 	int i;
 
 	for (i = 0; i < 12288; i++) {
-		if (type_cfg.cmd[i] != NULL)
-			free(type_cfg.cmd[i]);
+		free(type_cfg.cmd[i]);
 	}
 	for (i = 0; i < 256; i++) {
-		if (type_cfg.evt[i])
-			free(type_cfg.evt[i]);
+		free(type_cfg.evt[i]);
 	}
-	if (type_cfg.acl != NULL)
-		free(type_cfg.acl);
+	free(type_cfg.acl);
 }
 
 static void usage(void)
