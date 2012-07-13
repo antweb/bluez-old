@@ -49,57 +49,60 @@ static bool verbose = false;
 
 static struct btdev *btdev;
 
-__useconds_t timeval_diff(struct timeval *l, struct timeval *r, struct timeval *diff) {
+__useconds_t
+timeval_diff(struct timeval *l, struct timeval *r, struct timeval *diff)
+{
 	int tmpsec;
 	static struct timeval tmp;
 
 	/* make sure we keep usec difference positive */
-	if(r->tv_usec > l->tv_usec) {
+	if (r->tv_usec > l->tv_usec) {
 		tmpsec = (r->tv_usec - l->tv_usec) / 1000000 + 1;
 		r->tv_sec += tmpsec;
 		r->tv_usec -= 1000000 * tmpsec;
 	}
 
-	if((l->tv_usec - r->tv_usec) > 1000000) {
+	if ((l->tv_usec - r->tv_usec) > 1000000) {
 		tmpsec = (r->tv_usec - l->tv_usec) / 1000000;
 		r->tv_sec -= tmpsec;
 		r->tv_usec += 1000000 * tmpsec;
 	}
 
 	/* use local variable if we only need return value */
-	if(diff == NULL)
+	if (diff == NULL)
 		diff = &tmp;
 
-	diff->tv_sec = l->tv_sec - r->tv_sec ;
+	diff->tv_sec = l->tv_sec - r->tv_sec;
 	diff->tv_usec = l->tv_usec - r->tv_usec;
 
 	return (diff->tv_sec * 1000000) + diff->tv_usec;
 }
 
-int timeval_cmp(struct timeval *l, struct timeval *r) {
+int timeval_cmp(struct timeval *l, struct timeval *r)
+{
 	int tmpsec;
 
 	/* make sure we keep usec difference positive */
-	if(r->tv_usec > l->tv_usec) {
+	if (r->tv_usec > l->tv_usec) {
 		tmpsec = (r->tv_usec - l->tv_usec) / 1000000 + 1;
 		r->tv_sec += tmpsec;
 		r->tv_usec -= 1000000 * tmpsec;
 	}
 
-	if((l->tv_usec - r->tv_usec) > 1000000) {
+	if ((l->tv_usec - r->tv_usec) > 1000000) {
 		tmpsec = (r->tv_usec - l->tv_usec) / 1000000;
 		r->tv_sec -= tmpsec;
 		r->tv_usec += 1000000 * tmpsec;
 	}
 
-	if(l->tv_sec > r->tv_sec) {
+	if (l->tv_sec > r->tv_sec) {
 		return 1;
-	} else if(l->tv_sec < r->tv_sec) {
+	} else if (l->tv_sec < r->tv_sec) {
 		return -1;
 	} else {
-		if(l->tv_usec > r->tv_usec) {
+		if (l->tv_usec > r->tv_usec) {
 			return 1;
-		} else if(l->tv_usec > r->tv_usec) {
+		} else if (l->tv_usec > r->tv_usec) {
 			return -1;
 		} else {
 			return 0;
@@ -107,13 +110,16 @@ int timeval_cmp(struct timeval *l, struct timeval *r) {
 	}
 }
 
-static inline __useconds_t get_rel_ts(struct timeval *start, struct timeval *diff) {
+static inline __useconds_t
+get_rel_ts(struct timeval *start, struct timeval *diff)
+{
 	struct timeval now;
 	gettimeofday(&now, NULL);
 	return timeval_diff(&now, start, diff);
 }
 
-static inline timeval_get_usec(struct timeval *ts) {
+static inline timeval_get_usec(struct timeval *ts)
+{
 	return (ts->tv_sec * 1000000) + ts->tv_usec;
 }
 
@@ -129,12 +135,15 @@ static inline int read_n(int fd, char *buf, int len)
 		}
 		if (!w)
 			return 0;
-		len -= w; buf += w; t += w;
+		len -= w;
+		buf += w;
+		t += w;
 	}
 	return t;
 }
 
-static int parse_hcidump(int fd, struct frame *frm) {
+static int parse_hcidump(int fd, struct frame *frm)
+{
 	struct hcidump_hdr dh;
 	int n;
 
@@ -148,13 +157,14 @@ static int parse_hcidump(int fd, struct frame *frm) {
 	n = read_n(fd, frm->data, frm->data_len);
 
 	frm->in = dh.in;
-	frm->ts.tv_sec  = btohl(dh.ts_sec);
+	frm->ts.tv_sec = btohl(dh.ts_sec);
 	frm->ts.tv_usec = btohl(dh.ts_usec);
 
 	return n;
 }
 
-static int parse_pktlog(int fd, struct frame *frm) {
+static int parse_pktlog(int fd, struct frame *frm)
+{
 	struct pktlog_hdr ph;
 	int n;
 
@@ -183,7 +193,7 @@ static int parse_pktlog(int fd, struct frame *frm) {
 		break;
 	default:
 		lseek(fd, ntohl(ph.len) - 9, SEEK_CUR);
-		return 1; //TODO: fix continue
+		return 1;	//TODO: fix continue
 	}
 
 	frm->data_len = ntohl(ph.len) - 8;
@@ -197,7 +207,9 @@ static int parse_pktlog(int fd, struct frame *frm) {
 	return n;
 }
 
-static int parse_btsnoop(int fd, struct frame *frm, struct btsnoop_hdr *hdr) {
+static int
+parse_btsnoop(int fd, struct frame *frm, struct btsnoop_hdr *hdr)
+{
 	struct btsnoop_pkt pkt;
 	uint8_t pkt_type;
 	int n;
@@ -250,15 +262,15 @@ static int parse_dump(int fd, struct hciseq *seq, unsigned long flags)
 	last = seq->current;
 
 	if (flags & DUMP_BTSNOOP) {
-		//read BTSnoop header once
+		/* read BTSnoop header once */
 		if (read_n(fd, (void *) &bh, BTSNOOP_HDR_SIZE) != BTSNOOP_HDR_SIZE) {
-			 return -1;
+			return -1;
 		}
 	}
 
 	count = seq->len;
 	while (1) {
-		frm = malloc(sizeof(struct frame));
+		frm = malloc(sizeof(*frm));
 		frm->data = malloc(HCI_MAX_FRAME_SIZE);
 
 		if (flags & DUMP_PKTLOG)
@@ -268,18 +280,18 @@ static int parse_dump(int fd, struct hciseq *seq, unsigned long flags)
 		else
 			n = parse_hcidump(fd, frm);
 
-		if(n <= 0)
+		if (n <= 0)
 			return n;
 
 		frm->ptr = frm->data;
 		frm->len = frm->data_len;
 
-		nodeptr = malloc(sizeof(struct hciseq_node));
+		nodeptr = malloc(sizeof(*nodeptr));
 		nodeptr->frame = frm;
-		nodeptr->attr = (struct hciseq_attr*) malloc(sizeof(struct hciseq_attr));
+		nodeptr->attr = malloc(sizeof(*nodeptr->attr));
 		nodeptr->attr->action = HCISEQ_ACTION_REPLAY;
 
-		if(last == NULL) {
+		if (last == NULL) {
 			seq->frames = nodeptr;
 			last = nodeptr;
 		} else {
@@ -293,20 +305,27 @@ static int parse_dump(int fd, struct hciseq *seq, unsigned long flags)
 	return 0;
 }
 
-static void dump_frame(struct frame *frm) {
+static void dump_frame(struct frame *frm)
+{
 	uint8_t pkt_type = ((const uint8_t *) frm->data)[0];
 	switch (pkt_type) {
 	case BT_H4_CMD_PKT:
-		packet_hci_command(&start, 0x00, frm->data + 1, frm->data_len - 1);
+		packet_hci_command(&start, 0x00, frm->data + 1,
+				   frm->data_len - 1);
 		break;
 	case BT_H4_EVT_PKT:
-		packet_hci_event(&start, 0x00, frm->data + 1, frm->data_len - 1);
+		packet_hci_event(&start, 0x00, frm->data + 1,
+				 frm->data_len - 1);
 		break;
 	case BT_H4_ACL_PKT:
-		if(frm->in)
-			packet_hci_acldata(&start, 0x00, 0x01, frm->data + 1, frm->data_len - 1);
+		if (frm->in)
+			packet_hci_acldata(&start, 0x00, 0x01,
+					   frm->data + 1,
+					   frm->data_len - 1);
 		else
-			packet_hci_acldata(&start, 0x00, 0x00, frm->data + 1, frm->data_len - 1);
+			packet_hci_acldata(&start, 0x00, 0x00,
+					   frm->data + 1,
+					   frm->data_len - 1);
 		break;
 	default:
 		//TODO: hex dump
@@ -314,7 +333,8 @@ static void dump_frame(struct frame *frm) {
 	}
 }
 
-static int send_frm(struct frame *frm) {
+static int send_frm(struct frame *frm)
+{
 	int n;
 
 	n = write(fd, frm->data, frm->data_len);
@@ -322,16 +342,17 @@ static int send_frm(struct frame *frm) {
 	return n;
 }
 
-static int recv_frm(int fd, struct frame *frm) {
-	int i,n;
+static int recv_frm(int fd, struct frame *frm)
+{
+	int i, n;
 	int nevs;
 	uint8_t buf[HCI_MAX_FRAME_SIZE];
 	struct epoll_event ev[MAX_EPOLL_EVENTS];
 
 	nevs = epoll_wait(epoll_fd, ev, MAX_EPOLL_EVENTS, timeout);
-	if(nevs < 0) {
+	if (nevs < 0) {
 		perror("Failed to receive");
-	} else if(nevs == 0) {
+	} else if (nevs == 0) {
 		return 0;
 	}
 
@@ -341,7 +362,7 @@ static int recv_frm(int fd, struct frame *frm) {
 			return -1;
 		}
 
-		if((n = read(fd, (void*)&buf, HCI_MAX_FRAME_SIZE)) > 0) {
+		if ((n = read(fd, (void *) &buf, HCI_MAX_FRAME_SIZE)) > 0) {
 			memcpy(frm->data, buf, n);
 			frm->data_len = n;
 		}
@@ -350,7 +371,8 @@ static int recv_frm(int fd, struct frame *frm) {
 	return n;
 }
 
-void btdev_send (const void *data, uint16_t len, void *user_data) {
+void btdev_send(const void *data, uint16_t len, void *user_data)
+{
 	struct frame frm;
 	frm.data = data;
 	frm.len = len;
@@ -361,30 +383,32 @@ void btdev_send (const void *data, uint16_t len, void *user_data) {
 	send_frm(&frm);
 }
 
-void btdev_recv(struct frame *frm) {
+void btdev_recv(struct frame *frm)
+{
 	frm->in = 0;
 	printf("[Emulator ] ");
 	dump_frame(frm);
 	btdev_receive_h4(btdev, frm->data, frm->data_len);
 }
 
-static struct hciseq_attr* get_type_attr(struct frame *frm) {
+static struct hciseq_attr *get_type_attr(struct frame *frm)
+{
 	uint8_t pkt_type = ((const uint8_t *) frm->data)[0];
 	uint16_t opcode;
 	uint8_t evt;
 
 	switch (pkt_type) {
 	case BT_H4_CMD_PKT:
-		opcode = *((uint16_t*) (frm->data+1));
-		if(opcode > 0x2FFF)
+		opcode = *((uint16_t *) (frm->data + 1));
+		if (opcode > 0x2FFF)
 			return NULL;
 		return type_cfg.cmd[opcode];
 	case BT_H4_EVT_PKT:
-		evt = *((uint8_t*)(frm->data+1));
+		evt = *((uint8_t *) (frm->data + 1));
 
 		/* use attributes of opcode for 'Command Complete' events */
-		if(evt == 0x0e) {
-			opcode = *((uint16_t*) (frm->data+4));
+		if (evt == 0x0e) {
+			opcode = *((uint16_t *) (frm->data + 4));
 			return type_cfg.cmd[opcode];
 		}
 
@@ -397,58 +421,70 @@ static struct hciseq_attr* get_type_attr(struct frame *frm) {
 }
 
 
-static bool check_match(struct frame *l, struct frame *r, char *msg) {
+static bool check_match(struct frame *l, struct frame *r, char *msg)
+{
 	uint8_t type_l = ((const uint8_t *) l->data)[0];
 	uint8_t type_r = ((const uint8_t *) l->data)[0];
 	uint16_t opcode_l, opcode_r;
 	uint8_t evt_l, evt_r;
 
-	if(type_l != type_r) {
-		snprintf(msg, MAXMSG, "! Wrong packet type - expected (0x%2.2x), was (0x%2.2x)", type_l, type_r);
+	if (type_l != type_r) {
+		snprintf(msg, MAXMSG,
+			 "! Wrong packet type - expected (0x%2.2x), was (0x%2.2x)",
+			 type_l, type_r);
 		return false;
 	}
 
 	switch (type_l) {
 	case BT_H4_CMD_PKT:
-		opcode_l = *((uint16_t*) (l->data+1));
-		opcode_r = *((uint16_t*) (r->data+1));
-		if(opcode_l != opcode_r) {
-			snprintf(msg, MAXMSG, "! Wrong opcode - expected (0x%2.2x|0x%4.4x), was (0x%2.2x|0x%4.4x)", cmd_opcode_ogf(opcode_l), cmd_opcode_ocf(opcode_l), cmd_opcode_ogf(opcode_r), cmd_opcode_ocf(opcode_r));
+		opcode_l = *((uint16_t *) (l->data + 1));
+		opcode_r = *((uint16_t *) (r->data + 1));
+		if (opcode_l != opcode_r) {
+			snprintf(msg, MAXMSG,
+				 "! Wrong opcode - expected (0x%2.2x|0x%4.4x), was (0x%2.2x|0x%4.4x)",
+				 cmd_opcode_ogf(opcode_l),
+				 cmd_opcode_ocf(opcode_l),
+				 cmd_opcode_ogf(opcode_r),
+				 cmd_opcode_ocf(opcode_r));
 			return false;
 		} else {
 			return true;
 		}
 	case BT_H4_EVT_PKT:
-		evt_l = *((uint8_t*)(l->data+1));
-		evt_r = *((uint8_t*)(r->data+1));
-		if(evt_l != evt_r) {
-			snprintf(msg, MAXMSG, "! Wrong event type - expected (0x%2.2x), was (0x%2.2x)", evt_l, evt_r);
+		evt_l = *((uint8_t *) (l->data + 1));
+		evt_r = *((uint8_t *) (r->data + 1));
+		if (evt_l != evt_r) {
+			snprintf(msg, MAXMSG,
+				 "! Wrong event type - expected (0x%2.2x), was (0x%2.2x)",
+				 evt_l, evt_r);
 			return false;
 		} else {
 			return true;
 		}
 	case BT_H4_ACL_PKT:
-		if(l->data_len != r->data_len)
+		if (l->data_len != r->data_len)
 			return false;
 
-		if(!memcmp(l->data, r->data, l->data_len))
+		if (!memcmp(l->data, r->data, l->data_len))
 			return true;
 		else
 			return false;
 	default:
-		snprintf(msg, MAXMSG, "! Unknown packet type (0x%2.2x)", type_l);
+		snprintf(msg, MAXMSG, "! Unknown packet type (0x%2.2x)",
+			 type_l);
 
-		if(l->data_len != r->data_len)
+		if (l->data_len != r->data_len)
 			return false;
 
-		if(!memcmp(l->data, r->data, l->data_len))
+		if (!memcmp(l->data, r->data, l->data_len))
 			return true;
 		else
 			return false;
 	}
 }
 
-static int process_in() {
+static int process_in()
+{
 	static struct frame frm;
 	static uint8_t data[HCI_MAX_FRAME_SIZE];
 	uint8_t pkt_type;
@@ -461,10 +497,10 @@ static int process_in() {
 	frm.ptr = frm.data;
 
 	n = recv_frm(fd, &frm);
-	if(n < 0) {
+	if (n < 0) {
 		printf("Could not receive\n");
 		return 0;
-	} else if(n == 0){
+	} else if (n == 0) {
 		printf("[%4d/%4d] Timeout\n", pos, dumpseq.len);
 		skipped++;
 		return 1;
@@ -476,29 +512,33 @@ static int process_in() {
 
 	/* check type config */
 	attr = get_type_attr(&frm);
-	if(attr != NULL) {
-		if(attr->action == HCISEQ_ACTION_SKIP) {
-			if(match) {
-				printf("[%4d/%4d] SKIPPING\n", pos, dumpseq.len);
+	if (attr != NULL) {
+		if (attr->action == HCISEQ_ACTION_SKIP) {
+			if (match) {
+				printf("[%4d/%4d] SKIPPING\n", pos,
+				       dumpseq.len);
 				return 1;
 			} else {
-				printf("[ Unknown ] %s\n            ", msg);
+				printf("[ Unknown ] %s\n            ",
+				       msg);
 				dump_frame(&frm);
 				printf("            SKIPPING\n");
 				return 0;
 			}
 		}
-		if(attr->action == HCISEQ_ACTION_EMULATE) {
-			if(match) {
-				printf("[%4d/%4d] EMULATING\n", pos, dumpseq.len);
+		if (attr->action == HCISEQ_ACTION_EMULATE) {
+			if (match) {
+				printf("[%4d/%4d] EMULATING\n", pos,
+				       dumpseq.len);
 			} else {
-				printf("[ Unknown ] %s\n            ", msg);
+				printf("[ Unknown ] %s\n            ",
+				       msg);
 				printf("EMULATING\n");
 			}
 
 			btdev_recv(&frm);
 
-			if(match)
+			if (match)
 				return 1;
 			else
 				return 0;
@@ -506,10 +546,10 @@ static int process_in() {
 	}
 
 	/* process packet if match */
-	if(match) {
+	if (match) {
 		printf("[%4d/%4d] ", pos, dumpseq.len);
 
-		if(dumpseq.current->attr->action == HCISEQ_ACTION_EMULATE) {
+		if (dumpseq.current->attr->action == HCISEQ_ACTION_EMULATE) {
 			btdev_recv(&frm);
 			return 1;
 		}
@@ -523,22 +563,23 @@ static int process_in() {
 	}
 }
 
-static int process_out() {
+static int process_out()
+{
 	uint8_t pkt_type;
 	struct hciseq_attr *attr;
 
 	/* emulator sends response automatically */
-	if(dumpseq.current->attr->action == HCISEQ_ACTION_EMULATE) {
+	if (dumpseq.current->attr->action == HCISEQ_ACTION_EMULATE) {
 		return 1;
 	}
 
 	/* use type config if set */
 	attr = get_type_attr(dumpseq.current->frame);
-	if(attr != NULL) {
-		if(attr->action == HCISEQ_ACTION_SKIP) {
+	if (attr != NULL) {
+		if (attr->action == HCISEQ_ACTION_SKIP) {
 			return 1;
 		}
-		if(attr->action == HCISEQ_ACTION_EMULATE) {
+		if (attr->action == HCISEQ_ACTION_EMULATE) {
 			return 1;
 		}
 	}
@@ -563,15 +604,17 @@ static int process_out() {
 	return 1;
 }
 
-static void process() {
+static void process()
+{
 	__useconds_t delay;
 	struct timeval last;
 	int processed;
 
 	gettimeofday(&last, NULL);
 	do {
-		if(dumpseq.current->attr->action == HCISEQ_ACTION_SKIP) {
-			printf("[%4d/%4d] SKIPPING\n            ", pos, dumpseq.len);
+		if (dumpseq.current->attr->action == HCISEQ_ACTION_SKIP) {
+			printf("[%4d/%4d] SKIPPING\n            ", pos,
+			       dumpseq.len);
 			dump_frame(dumpseq.current->frame);
 			dumpseq.current = dumpseq.current->next;
 			pos++;
@@ -579,15 +622,16 @@ static void process() {
 		}
 
 		/* delay */
-		if(timing == TIMING_DELTA) {
+		if (timing == TIMING_DELTA) {
 			/* consider exec time of process_out()/process_in() */
 			get_rel_ts(&last, &last);
-			if(timeval_cmp(&dumpseq.current->attr->ts_diff, &last) >= 0) {
-				delay = timeval_diff(&dumpseq.current->attr->ts_diff, &last, NULL);
+			if (timeval_cmp (&dumpseq.current->attr->ts_diff, &last) >= 0) {
+				delay = timeval_diff(&dumpseq.current->attr->ts_diff,
+						&last, NULL);
 				delay *= factor;
-				if(usleep(delay) == -1) {
+
+				if (usleep(delay) == -1)
 					printf("Delay failed\n");
-				}
 			} else {
 				/* exec time was longer than delay */
 				printf("Packet delay\n");
@@ -595,48 +639,53 @@ static void process() {
 			gettimeofday(&last, NULL);
 		}
 
-		if(dumpseq.current->frame->in == 1) {
+		if (dumpseq.current->frame->in == 1) {
 			processed = process_out();
 		} else {
 			processed = process_in();
 		}
 
-		if(processed) {
+		if (processed) {
 			dumpseq.current = dumpseq.current->next;
 			pos++;
 		}
-	} while(dumpseq.current != NULL);
+	} while (dumpseq.current != NULL);
 
 	printf("Done\n");
-	printf("Processed %d out of %d\n", dumpseq.len-skipped, dumpseq.len);
+	printf("Processed %d out of %d\n", dumpseq.len - skipped,
+	       dumpseq.len);
 }
 
-static int vhci_open() {
+static int vhci_open()
+{
 	fd = open("/dev/vhci", O_RDWR | O_NONBLOCK);
-	if((epoll_fd = epoll_create1(EPOLL_CLOEXEC)) < 0) {
+	if ((epoll_fd = epoll_create1(EPOLL_CLOEXEC)) < 0) {
 		return -1;
 	}
 
 	epoll_event.events = EPOLLIN;
 	epoll_event.data.fd = fd;
 
-	if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, epoll_event.data.fd, &epoll_event) < 0) {
+	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD,
+			epoll_event.data.fd, &epoll_event) < 0) {
 		return -1;
 	}
 
 	return fd;
 }
 
-static int vhci_close() {
+static int vhci_close()
+{
 	epoll_ctl(epoll_fd, EPOLL_CTL_DEL, epoll_event.data.fd, NULL);
 	return close(fd);
 }
 
-static void delete_list() {
+static void delete_list()
+{
 	struct hciseq_node *node, *tmp;
 
 	node = dumpseq.frames;
-	while(node != NULL) {
+	while (node != NULL) {
 		tmp = node;
 		node = node->next;
 
@@ -647,44 +696,45 @@ static void delete_list() {
 	}
 }
 
-static void delete_type_cfg() {
+static void delete_type_cfg()
+{
 	int i;
 
-	for(i = 0; i < 12288; i++) {
-		if(type_cfg.cmd[i] != NULL)
+	for (i = 0; i < 12288; i++) {
+		if (type_cfg.cmd[i] != NULL)
 			free(type_cfg.cmd[i]);
 	}
-	for(i = 0; i < 256; i++) {
-		if(type_cfg.evt[i])
+	for (i = 0; i < 256; i++) {
+		if (type_cfg.evt[i])
 			free(type_cfg.evt[i]);
 	}
-	if(type_cfg.acl != NULL)
+	if (type_cfg.acl != NULL)
 		free(type_cfg.acl);
 }
 
 static void usage(void)
 {
 	printf("hcireplay - Bluetooth replayer\n"
-		"Usage:\thcireplay-client [options] file...\n"
-		"options:\n"
-		"\t-d, --timing={none|delta}    Specify timing mode\n"
-		"\t-m, --factor=<value>         Use timing modifier\n"
-		"\t-t, --timeout=<value>        Use timeout when receiving\n"
-		"\t-c, --config=<file>          Use config file\n"
-		"\t-v, --verbose                Enable verbose output\n"
-		"\t    --version                Give version information\n"
-		"\t    --help                   Give a short usage message\n");
+	       "Usage:\thcireplay-client [options] file...\n"
+	       "options:\n"
+	       "\t-d, --timing={none|delta}    Specify timing mode\n"
+	       "\t-m, --factor=<value>         Use timing modifier\n"
+	       "\t-t, --timeout=<value>        Use timeout when receiving\n"
+	       "\t-c, --config=<file>          Use config file\n"
+	       "\t-v, --verbose                Enable verbose output\n"
+	       "\t    --version                Give version information\n"
+	       "\t    --help                   Give a short usage message\n");
 }
 
 static const struct option main_options[] = {
-	{ "timing",	required_argument,		NULL, 'd'	},
-	{ "factor",	required_argument,		NULL, 'm'	},
-	{ "timeout",	required_argument,	NULL, 't'	},
-	{ "config",	required_argument,	    NULL, 'c'	},
-	{ "verbose",    no_argument,        NULL, 'v'	},
-	{ "version",    no_argument,        NULL, 'V'	},
-	{ "help",       no_argument,        NULL, 'H'	},
-	{ }
+	{"timing", required_argument, NULL, 'd'},
+	{"factor", required_argument, NULL, 'm'},
+	{"timeout", required_argument, NULL, 't'},
+	{"config", required_argument, NULL, 'c'},
+	{"verbose", no_argument, NULL, 'v'},
+	{"version", no_argument, NULL, 'V'},
+	{"help", no_argument, NULL, 'H'},
+	{}
 };
 
 int main(int argc, char *argv[])
@@ -692,21 +742,22 @@ int main(int argc, char *argv[])
 	unsigned long flags = 0;
 
 	int dumpfd;
-	int i,j;
+	int i, j;
 	char *config = NULL;
 
-	while(1) {
+	while (1) {
 		int opt;
 
-		opt = getopt_long(argc, argv, "d:m:t:c:v", main_options, NULL);
+		opt = getopt_long(argc, argv, "d:m:t:c:v",
+				  main_options, NULL);
 		if (opt < 0)
 			break;
 
 		switch (opt) {
 		case 'd':
-			if(!strcmp(optarg, "none")) {
+			if (!strcmp(optarg, "none")) {
 				timing = TIMING_NONE;
-			} else if(!strcmp(optarg, "delta")) {
+			} else if (!strcmp(optarg, "delta")) {
 				timing = TIMING_DELTA;
 			}
 			break;
@@ -742,13 +793,13 @@ int main(int argc, char *argv[])
 	dumpseq.frames = NULL;
 	flags |= DUMP_BTSNOOP;
 	flags |= DUMP_VERBOSE;
-	for(j = optind; j < argc; j++) {
+	for (j = optind; j < argc; j++) {
 		dumpfd = open(argv[j], O_RDONLY);
-		if(dumpfd < 0) {
+		if (dumpfd < 0) {
 			perror("Failed to open dump file");
 		}
 
-		if(parse_dump(dumpfd, &dumpseq, flags) < 0) {
+		if (parse_dump(dumpfd, &dumpseq, flags) < 0) {
 			fprintf(stderr, "Error parsing dump file\n");
 			vhci_close();
 			return 1;
@@ -758,14 +809,14 @@ int main(int argc, char *argv[])
 	calc_rel_ts(&dumpseq);
 
 	/* init type config */
-	for(i = 0; i < 12288; i++)
+	for (i = 0; i < 12288; i++)
 		type_cfg.cmd[i] = NULL;
-	for(i = 0; i < 256; i++)
+	for (i = 0; i < 256; i++)
 		type_cfg.evt[i] = NULL;
 	type_cfg.acl = NULL;
 
-	if(config != NULL) {
-		if(parse_config(config, &dumpseq, &type_cfg, verbose)) {
+	if (config != NULL) {
+		if (parse_config(config, &dumpseq, &type_cfg, verbose)) {
 			vhci_close();
 			return 1;
 		}
@@ -781,7 +832,7 @@ int main(int argc, char *argv[])
 	 * make sure we open the interface after parsing
 	 * through all files so we can start without delay
 	 */
-	if((fd = vhci_open()) < 0) {
+	if ((fd = vhci_open()) < 0) {
 		perror("Failed to open VHCI interface");
 		return 1;
 	}

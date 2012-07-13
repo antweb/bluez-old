@@ -4,28 +4,28 @@
 #include "hciseq.h"
 
 struct hcidump_hdr {
-	uint16_t	len;
-	uint8_t		in;
-	uint8_t		pad;
-	uint32_t	ts_sec;
-	uint32_t	ts_usec;
+	uint16_t len;
+	uint8_t in;
+	uint8_t pad;
+	uint32_t ts_sec;
+	uint32_t ts_usec;
 } __attribute__ ((packed));
 #define HCIDUMP_HDR_SIZE (sizeof(struct hcidump_hdr))
 
 struct btsnoop_hdr {
-	uint8_t		id[8];		/* Identification Pattern */
-	uint32_t	version;	/* Version Number = 1 */
-	uint32_t	type;		/* Datalink Type */
+	uint8_t id[8];		/* Identification Pattern */
+	uint32_t version;	/* Version Number = 1 */
+	uint32_t type;		/* Datalink Type */
 } __attribute__ ((packed));
 #define BTSNOOP_HDR_SIZE (sizeof(struct btsnoop_hdr))
 
 struct btsnoop_pkt {
-	uint32_t	size;		/* Original Length */
-	uint32_t	len;		/* Included Length */
-	uint32_t	flags;		/* Packet Flags */
-	uint32_t	drops;		/* Cumulative Drops */
-	uint64_t	ts;		/* Timestamp microseconds */
-	uint8_t		data[0];	/* Packet Data */
+	uint32_t size;		/* Original Length */
+	uint32_t len;		/* Included Length */
+	uint32_t flags;		/* Packet Flags */
+	uint32_t drops;		/* Cumulative Drops */
+	uint64_t ts;		/* Timestamp microseconds */
+	uint8_t data[0];	/* Packet Data */
 } __attribute__ ((packed));
 #define BTSNOOP_PKT_SIZE (sizeof(struct btsnoop_pkt))
 
@@ -35,9 +35,9 @@ static uint32_t btsnoop_version = 0;
 static uint32_t btsnoop_type = 0;
 
 struct pktlog_hdr {
-	uint32_t	len;
-	uint64_t	ts;
-	uint8_t		type;
+	uint32_t len;
+	uint64_t ts;
+	uint8_t type;
 } __attribute__ ((packed));
 #define PKTLOG_HDR_SIZE (sizeof(struct pktlog_hdr))
 
@@ -57,22 +57,22 @@ struct pktlog_hdr {
 #define DUMP_TYPE_MASK	(DUMP_ASCII | DUMP_HEX | DUMP_EXT)
 
 struct frame {
-	void		*data;
-	uint32_t	data_len;
-	void		*ptr;
-	uint32_t	len;
-	uint16_t	dev_id;
-	uint8_t		in;
-	uint8_t		master;
-	uint16_t	handle;
-	uint16_t	cid;
-	uint16_t	num;
-	uint8_t		dlci;
-	uint8_t		channel;
-	unsigned long	flags;
-	struct timeval	ts;
-	int		pppdump_fd;
-	int		audio_fd;
+	void *data;
+	uint32_t data_len;
+	void *ptr;
+	uint32_t len;
+	uint16_t dev_id;
+	uint8_t in;
+	uint8_t master;
+	uint16_t handle;
+	uint16_t cid;
+	uint16_t num;
+	uint8_t dlci;
+	uint8_t channel;
+	unsigned long flags;
+	struct timeval ts;
+	int pppdump_fd;
+	int audio_fd;
 };
 
 struct hciseq_type_cfg {
@@ -81,6 +81,7 @@ struct hciseq_type_cfg {
 	struct hciseq_attr *acl;
 };
 
-__useconds_t timeval_diff(struct timeval *l, struct timeval *r, struct timeval *diff);
+__useconds_t timeval_diff(struct timeval *l, struct timeval *r,
+			  struct timeval *diff);
 
 #endif

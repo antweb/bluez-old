@@ -28,7 +28,8 @@ struct hciseq_node {
 	struct hciseq_attr *attr;
 };
 
-int find_by_opcode(struct hciseq_node *start, struct hciseq_node **ptr, uint16_t opcode);
+int find_by_opcode(struct hciseq_node *start, struct hciseq_node **ptr,
+		   uint16_t opcode);
 void calc_rel_ts();
 
 #endif
