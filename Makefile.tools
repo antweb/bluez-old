@@ -69,9 +69,9 @@ emulator_btvirt_SOURCES = emulator/main.c monitor/bt.h \
 					emulator/vhci.h emulator/vhci.c \
 					emulator/btdev.h emulator/btdev.c
 
-tools_hcireplay_hcireplay_SOURCES = tools/hcireplay/hcireplay.c \
-					tools/hcireplay/hciseq.h tools/hcireplay/hciseq.c \
-					tools/hcireplay/config.h tools/hcireplay/config.c \
+tools_replay_btreplay_SOURCES = tools/replay/main.c \
+					tools/replay/hciseq.h tools/replay/hciseq.c \
+					tools/replay/config.h tools/replay/config.c \
 					monitor/packet.h monitor/packet.c \
 					monitor/btsnoop.h monitor/btsnoop.c \
 					monitor/control.h monitor/control.c \
@@ -79,7 +79,7 @@ tools_hcireplay_hcireplay_SOURCES = tools/hcireplay/hcireplay.c \
 					emulator/btdev.h emulator/btdev.c \
 					lib/hci.h
 					
-tools_hcireplay_hcireplay_LDADD = lib/libbluetooth-private.la
+tools_replay_btreplay_LDADD = lib/libbluetooth-private.la
 
 if READLINE
 bin_PROGRAMS += attrib/gatttool

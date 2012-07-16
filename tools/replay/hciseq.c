@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include "hciseq.h"
-#include "hcireplay.h"
+#include "main.h"
 #include "monitor/bt.h"
 
 int find_by_opcode(struct hciseq_node *start, struct hciseq_node **ptr,

@@ -87,7 +87,7 @@ unit/test-eir
 tools/btmgmt
 monitor/btmon
 emulator/btvirt
-tools/hcireplay/hcireplay
+tools/replay/btreplay
 
 doc/*.bak
 doc/*.stamp
