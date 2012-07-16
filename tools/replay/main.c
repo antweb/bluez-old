@@ -15,7 +15,7 @@
 
 #include "lib/bluetooth.h"
 #include "lib/hci.h"
-#include "hcireplay.h"
+#include "main.h"
 #include "hciseq.h"
 #include "monitor/bt.h"
 #include "config.h"

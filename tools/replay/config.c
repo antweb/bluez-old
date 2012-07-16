@@ -9,7 +9,7 @@
 #include "lib/bluetooth.h"
 #include "lib/hci.h"
 #include "hciseq.h"
-#include "hcireplay.h"
+#include "main.h"
 #include "monitor/bt.h"
 
 #define MAXLINE 128
